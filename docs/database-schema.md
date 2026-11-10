@@ -36,3 +36,11 @@ posts ─ campaign_posts >─ campaigns        posts ─< approval_requests ─<
 * `analytics_metrics`: `CHECK (availability = 'available') = (value IS NOT NULL)` — a missing value can never be stored as 0; UPDATE is rejected by trigger.
 * Credentials, invitation tokens and OAuth state are stored only as ciphertext/hashes.
 * Indexes follow the actual queries; `test/reliability.test.ts` replays the application's real statements through `EXPLAIN` with sequential scans disabled and fails if any growing table would need a full scan (it proves an index path exists; it does not prove selectivity at production data volumes → load test on Neon before launch).
+
+## Billing and MCP (migrations 0022-0024)
+- `billing_plans` / `billing_plan_versions` / `billing_prices` / `billing_entitlements`: immutable catalog (prices in integer minor units, `provider_refs` mutable). Seeded Free/Starter/Pro/Agency with PLACEHOLDER values.
+- `billing_subscriptions`: unique live row per workspace; unique `(provider, provider_subscription_id)`.
+- `billing_usage_events`: immutable, unique `(workspace_id, idempotency_key)`.
+- `billing_webhook_events`: unique `(provider, event_id)`; `billing_payments`: unique `(provider, provider_payment_id, status)`.
+- `mcp_grants` (+ `mcp_access_tokens`, `mcp_device_codes`): hashed credentials only (SHA-256); access tokens cascade-delete with their grant.
+See docs/billing.md and docs/mcp.md.

@@ -98,8 +98,20 @@
 - Gates: Meta App Review (Threads non-testers, Facebook), Pinterest Trial access (self-visible pins), TikTok audit + verified media domain.
 - Not built: Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp/Discord (messaging, not social posting), Tumblr (optional later); video transcoding, Bluesky/Pinterest video, Telegram albums, Facebook/TikTok/Pinterest-pin analytics. Competitors remain X/YouTube only.
 
+## Phase 13 — Analytics gaps, billing, MCP, CLI: DONE (mocked/in-process tests only)
+Details: docs/billing.md, docs/mcp.md. Decisions (user, 2026-11-11): keep Cloudflare Workers (no Redis/BullMQ), billing per workspace, **Dodo Payments** as the provider (Razorpay dropped), CLI proxies to remote `/mcp`, backend-only admin, placeholder plan prices until real numbers are supplied, never deploy or touch a production DB from the agent.
+- Analytics: the schema already covered the requested model; added `GET /analytics/sync-status` (freshness per platform; counts only, no error text). Not added: separate capability table / sync-run log (adapter capabilities and `analytics_targets` already hold them).
+- Billing (migrations 0022-0023): immutable plan versions, entitlement service (`check/enforce`), usage metering at the *published* transition, Dodo adapter, signed-webhook pipeline with dedupe + retry sweeper, checkout/cancel/portal, operator endpoints. REST plan limits are **opt-in** (`BILLING_ENFORCE`).
+- MCP (migration 0024): 9 analytics + 6 billing tools, 6 resources, 4 prompts, `/mcp` Streamable HTTP (stateless, SDK v2), PATs, RFC 8628 device flow with rotating refresh and reuse detection, audit, per-IP/per-credential rate limits.
+- CLI `cli/`: `distora mcp login|logout|status|serve` (stdio bridge, OS credential store).
+- Tests: +83 (`billing*.test.ts`, `mcp*.test.ts`, `cli.test.ts`, log-redaction case). Whole suite 377 passed / 43 files; typecheck clean; `wrangler deploy --dry-run` bundles (1000 KiB gzip).
+- **Not verified**: Dodo sandbox/live (payload fields for `payment.*` events are from partial docs), workerd runtime for `/mcp`, a real MCP host, Keychain/Secret Service code paths, npm publish of the CLI.
+- **Not built**: browser OAuth authorization-code + dynamic client registration for MCP (Better Auth `@better-auth/mcp` was evaluated: it needs a login + consent UI and its own tables, and its CIMD fetch transport is Node-only, so it was deferred; PATs and the device flow cover the CLI and header-based clients). Content/publishing MCP tools (future phase by design). Frontend UI. Razorpay/Cashfree adapters. Plan changes/refunds (portal only).
+- **Before charging real money**: replace placeholder prices, create Dodo products + map them, walk the sandbox checklist in docs/billing.md, then decide when to set `BILLING_ENFORCE=true` (it caps existing Free workspaces: 3 accounts, 1 seat, 30 posts/month by the placeholders).
+- Not touched: the stale "Known limitations" / Phase 6 text above still lists only the original platforms' gates.
+
 ## Test results
-See `npm test` for the current count (294 passed / 34 files before Phase 12 added 37 tests). Typecheck clean. Opt-in live tests: `npm run test:live` (12 skipped without credentials).
+See `npm test` for the current count (377 passed / 43 files after Phase 13). Typecheck clean. Opt-in live tests: `npm run test:live` (12 skipped without credentials).
 Not verified: real workerd + Neon/Hyperdrive end-to-end; real Cloudflare Queues/R2/KV/Images; any live platform API.
 
 ## Known limitations (read before launch)
