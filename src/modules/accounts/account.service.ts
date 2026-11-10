@@ -1,3 +1,4 @@
+import { noGate, type Gate } from "../billing/gate.js";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { Config } from "../../config/env.js";
@@ -18,8 +19,9 @@ const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 const cursorSchema = z.object({ createdAt: z.string(), id: z.string() });
 const verifierChallenge = (v: string) => createHash("sha256").update(v).digest("base64url");
 
-export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher | null; registry: AdapterRegistry; workspaces: WorkspaceService; log?: { error(o: object, m: string): void } }) {
+export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher | null; registry: AdapterRegistry; workspaces: WorkspaceService; gate?: Gate; log?: { error(o: object, m: string): void } }) {
   const { db, cfg, registry, workspaces } = deps;
+  const gate = deps.gate ?? noGate;
   const cipher = () => {
     if (!deps.cipher) throw new AppError(503, "ENCRYPTION_NOT_CONFIGURED", "TOKEN_ENC_KEYS is not configured");
     return deps.cipher;
@@ -147,6 +149,7 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
 
     async connect(a: Actor, workspaceId: string, platform: Platform) {
       await workspaces.authorize(a.id, workspaceId, "accounts:manage");
+      await gate(workspaceId, "connected_accounts");                              // reconnecting an existing account goes through the reconnect path, not this one
       return { authorizationUrl: await beginAuthorization(a, workspaceId, platform) };
     },
 
@@ -183,6 +186,7 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
       await workspaces.authorize(a.id, workspaceId, "accounts:manage");
       const adapter = registry.get(platform);
       if (!adapter.credentials) throw badRequest(`${platform} connects with OAuth, not credentials`);
+      await gate(workspaceId, "connected_accounts");
       for (const f of adapter.credentials.fields) if (!fields[f.name]?.trim()) throw badRequest(`Missing field '${f.name}'`);
       const connected = await adapter.credentials.connect(fields);
       return db.tx((tx) => store(tx, workspaceId, a.id, platform, connected));

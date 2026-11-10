@@ -4,6 +4,7 @@ import type { Db, Queryable } from "../../infrastructure/database/db.js";
 import type { Mailer } from "../../infrastructure/email/resend.js";
 import { AppError, badRequest, forbidden, notFound } from "../../shared/errors/errors.js";
 import { decodeCursor, page } from "../../shared/utils/pagination.js";
+import { noGate, type Gate } from "../billing/gate.js";
 import { auditRepository } from "../audit/audit.repository.js";
 import { can, canManageRole, type Permission, type Role } from "./permissions.js";
 import { workspaceRepository as repo } from "./workspace.repository.js";
@@ -14,7 +15,7 @@ const cursorSchema = z.object({ createdAt: z.string(), id: z.string() });
 
 export interface Actor { id: string; email: string; requestId?: string }
 
-export function createWorkspaceService(db: Db, mailer: Mailer, appUrl: string) {
+export function createWorkspaceService(db: Db, mailer: Mailer, appUrl: string, gate: Gate = noGate) {
   /**
    * Single gate for tenant access. Non-members get 404 (never confirm another tenant's workspace exists);
    * members lacking the permission get 403.
@@ -65,6 +66,7 @@ export function createWorkspaceService(db: Db, mailer: Mailer, appUrl: string) {
     async invite(a: Actor, workspaceId: string, input: { email: string; role: Role }) {
       const actorRole = await authorize(a.id, workspaceId, "members:manage");
       if (!canManageRole(actorRole, input.role)) throw forbidden();
+      await gate(workspaceId, "seats");
       const token = randomBytes(32).toString("base64url");
       let inv;
       try {
@@ -100,6 +102,7 @@ export function createWorkspaceService(db: Db, mailer: Mailer, appUrl: string) {
         const inv = await repo.consumeInvitation(q, sha256(token));
         if (!inv) throw badRequest("Invitation is invalid, expired or already used");
         if (inv.email.toLowerCase() !== a.email.toLowerCase()) throw forbidden(); // rolls back the consume
+        await gate(inv.workspace_id, "seats", 1, q);                               // a full workspace cannot gain members through old invitations
         await repo.addMember(q, inv.workspace_id, a.id, inv.role);
         await auditRepository.record(q, { workspaceId: inv.workspace_id, actorId: a.id, action: "invitation.accepted", entityType: "invitation", entityId: inv.id, ...(a.requestId ? { requestId: a.requestId } : {}) });
         return { workspaceId: inv.workspace_id, role: inv.role };

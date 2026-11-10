@@ -97,6 +97,14 @@ describe("secrets and logs", () => {
     expect(out).toContain("[REDACTED]");
   });
 
+  it("redacts payment and MCP secrets (provider keys, webhook signatures, device codes, tokens, card data)", () => {
+    const lines: string[] = [];
+    const log = pino({ redact: { paths: redactPaths, censor: "[REDACTED]" } }, { write: (s: string) => void lines.push(s) } as never);
+    log.info({ cfg: { apiKey: "dodo-KEY-SECRET", webhookKey: "whsec-SECRET" }, req: { headers: { "webhook-signature": "v1,SIG-SECRET" } }, grant: { token: "dsa_TOKEN-SECRET", device_code: "DEV-SECRET" }, pay: { cardNumber: "4111-SECRET", cvv: "123-SECRET" } }, "evt");
+    const out = lines.join("");
+    for (const secret of ["dodo-KEY-SECRET", "whsec-SECRET", "SIG-SECRET", "TOKEN-SECRET", "DEV-SECRET", "4111-SECRET", "123-SECRET"]) expect(out).not.toContain(secret);
+  });
+
   it("source contains no hard-coded credentials", () => {
     const walk = (d: string): string[] => readdirSync(d).flatMap((f) => { const p = path.join(d, f); return statSync(p).isDirectory() ? walk(p) : p.endsWith(".ts") ? [p] : []; });
     const hits: string[] = [];

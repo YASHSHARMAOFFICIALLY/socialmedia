@@ -83,6 +83,8 @@ export async function processPublishJob(deps: EngineDeps, jobId: string): Promis
     const ok = await db.tx(async (q) => {
       const n = await repo.markPublished(q, job, result);
       if (!n) return false;
+      // Metering counts only what really published, once per job (the key makes retries and lease races harmless).
+      await q.query("INSERT INTO billing_usage_events (workspace_id, feature_key, quantity, idempotency_key) VALUES ($1,'posts_per_month',1,$2) ON CONFLICT (workspace_id, idempotency_key) DO NOTHING", [job.workspace_id, `published:${job.id}`]);
       await repo.finishAttempt(q, job, "success", { response: result.warnings?.length ? { raw: result.raw, warnings: result.warnings } : result.raw });
       await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "published", reason: `external id ${result.externalId}` });
       return true;

@@ -45,6 +45,7 @@ import type { AnalyticsMessage, JobQueue } from "./infrastructure/queues/queue.j
 import { handlePublishBatch } from "./workers/publishing/consumer.js";
 import { processPublishJob, type EngineDeps } from "./workers/publishing/process-job.js";
 import { dispatchOutbox, runPublishingSweep } from "./workers/publishing/sweeper.js";
+import { type Gate } from "./modules/billing/gate.js";
 import { createDodoProvider } from "./integrations/payments/dodo.adapter.js";
 import type { PaymentProvider } from "./integrations/payments/types.js";
 import { createBillingPayments } from "./modules/billing/billing.payments.js";
@@ -69,10 +70,12 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
     createMastodonAdapter(),
     createTelegramAdapter(),
   ];
-  const workspaces = createWorkspaceService(db, mailer, cfg.APP_URL ?? cfg.BETTER_AUTH_URL ?? "");
+  // Late-bound: billing is built after the services it gates (it needs `workspaces`).
+  const gate: Gate = (ws, feature, qty, q) => (cfg.BILLING_ENFORCE ? billing.enforce(ws, feature, qty, q) : Promise.resolve());
+  const workspaces = createWorkspaceService(db, mailer, cfg.APP_URL ?? cfg.BETTER_AUTH_URL ?? "", gate);
   const registry = createRegistry(adapters);
   const cipher = cfg.TOKEN_ENC_KEYS ? await createCipher(cfg.TOKEN_ENC_KEYS) : null;
-  const accounts = createAccountService({ db, cfg, workspaces, registry, cipher, log });
+  const accounts = createAccountService({ db, cfg, workspaces, registry, cipher, log, gate });
   const webhooks = createWebhookService({ db, workspaces, cipher, log, allowInsecure: cfg.NODE_ENV === "development", ...(o.webhookFetch ? { fetch: o.webhookFetch } : {}) });
   const content = createContentService({ db, workspaces, registry, rules: contentRules });
   const storage = o.storage !== undefined ? o.storage
@@ -83,7 +86,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
   const engineDeps: EngineDeps = { db, log, registry, accounts, content, ...(storage ? { mediaUrl: (key: string) => storage.presignGet(key, 3600) } : {}), ...o.engine };
   const notifications = createNotificationService({ db, workspaces, mailer, log, appUrl: cfg.APP_URL, webhooks: webhooks.emitter });
   const approvals = createApprovalService({ db, workspaces, content, notifications });
-  const publishing = createPublishingService({ db, workspaces, content, log, kick: () => dispatchOutbox(engineDeps, o.queue), approvalGate: approvals });
+  const publishing = createPublishingService({ db, workspaces, content, log, gate, kick: () => dispatchOutbox(engineDeps, o.queue), approvalGate: approvals });
   const engine = {
     handleBatch: (m: Parameters<typeof handlePublishBatch>[1]) => handlePublishBatch(engineDeps, m),
     sweep: () => runPublishingSweep(engineDeps, o.queue),

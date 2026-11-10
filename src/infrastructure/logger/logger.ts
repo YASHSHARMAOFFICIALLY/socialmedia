@@ -5,6 +5,9 @@ import type { Config } from "../../config/env.js";
 export const redactPaths = [
   "req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']",
   "*.accessToken", "*.refreshToken", "*.access_token", "*.refresh_token", "*.password",
+  // payments + MCP: provider keys, webhook signing keys/signatures, device codes, bearer/personal tokens, card data (never stored, never logged)
+  "*.apiKey", "*.webhookKey", "*.token", "*.device_code", "*.client_secret", "*.cardNumber", "*.cvv", "*.card_number",
+  "req.headers['webhook-signature']", "req.headers['x-hub-signature-256']",
 ];
 
 export function createLogger(cfg: Pick<Config, "LOG_LEVEL">) {

@@ -34,6 +34,7 @@ const schema = z.object({
   OPS_TOKEN: z.string().min(24).optional(),   // enables GET /health/queues for external monitoring
   DODO_API_KEY: z.string().min(10).optional(),          // enables billing checkout/cancel (secret: never logged)
   DODO_WEBHOOK_KEY: z.string().min(10).optional(),      // Standard Webhooks signing secret (whsec_...)
+  BILLING_ENFORCE: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),   // plan limits on REST (accounts, seats, posts). MCP always requires its entitlement.
   DODO_MODE: z.enum(["test", "live"]).default("test"),
   ANTHROPIC_API_KEY: z.string().optional(),     // optional: enables AI suggestions
   AI_MODEL: z.string().default("claude-haiku-5-5"),

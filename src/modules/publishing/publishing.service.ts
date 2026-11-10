@@ -1,3 +1,4 @@
+import { noGate, type Gate } from "../billing/gate.js";
 import { z } from "zod";
 import type { Db } from "../../infrastructure/database/db.js";
 import { AppError, notFound } from "../../shared/errors/errors.js";
@@ -14,7 +15,7 @@ const cursorSchema = z.object({ createdAt: z.string(), id: z.string() });
 // Strip internal columns (lease fence, idempotency marker) before anything leaves the service.
 const view = ({ workspace_id: _w, lease_token: _l, lease_until: _u, unknown_since: _s, idempotency_key: _i, ...j }: Partial<JobRow> & { id: string }) => j;
 
-export function createPublishingService(deps: { db: Db; workspaces: WorkspaceService; content: ContentService; kick: () => Promise<unknown>; approvalGate?: { assertPublishable(q: import("../../infrastructure/database/db.js").Queryable, ws: string, postId: string): Promise<void> }; log: { warn(o: object, m: string): void } }) {
+export function createPublishingService(deps: { db: Db; workspaces: WorkspaceService; content: ContentService; kick: () => Promise<unknown>; gate?: Gate; approvalGate?: { assertPublishable(q: import("../../infrastructure/database/db.js").Queryable, ws: string, postId: string): Promise<void> }; log: { warn(o: object, m: string): void } }) {
   const { db, workspaces, content } = deps;
   /** Best effort: push new outbox rows to the queue right away. If it fails the sweeper does it within a minute. */
   const kick = () => deps.kick().catch((err) => deps.log.warn({ err }, "immediate outbox dispatch failed; sweeper will retry"));
@@ -47,6 +48,7 @@ export function createPublishingService(deps: { db: Db; workspaces: WorkspaceSer
         const live = await repo.blockedVariantIds(q, workspaceId, postId);
         const targets = selected.filter((v) => !live.has(v.id));
         if (targets.length === 0) throw new AppError(409, "ALREADY_SUBMITTED", "Every selected destination is already queued, published or failed (use retry for failed publications)");
+        await (deps.gate ?? noGate)(workspaceId, "posts_per_month", targets.length, q);   // one unit per destination
         const now = new Date();
         const sched = opts.schedule;
         if (sched && !sched.allowConflicts) {
