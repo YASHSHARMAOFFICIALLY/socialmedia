@@ -1,0 +1,27 @@
+{
+  "name": "social-platform",
+  "main": "src/entrypoints/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": { "NODE_ENV": "production", "LOG_LEVEL": "info", "CORS_ORIGINS": "" },
+  // Create with: wrangler hyperdrive create social-db --connection-string="<neon DIRECT connection string>"
+  // Local dev uses CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=<postgres url>
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "REPLACE_WITH_HYPERDRIVE_ID" }],
+  // Delivery only: Postgres (jobs + outbox) is the source of truth, the sweeper re-enqueues anything lost.
+  "queues": {
+    "producers": [
+      { "binding": "PUBLISH_QUEUE", "queue": "publish-jobs" },
+      { "binding": "ANALYTICS_QUEUE", "queue": "analytics-collect" }
+    ],
+    "consumers": [
+      { "queue": "publish-jobs", "max_batch_size": 5, "max_batch_timeout": 2, "max_retries": 5, "dead_letter_queue": "publish-jobs-dlq" },
+      { "queue": "analytics-collect", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 3, "dead_letter_queue": "analytics-collect-dlq" },
+      { "queue": "publish-jobs-dlq", "max_batch_size": 10 },
+      { "queue": "analytics-collect-dlq", "max_batch_size": 10 }
+    ]
+  },
+  // Optional dashboard cache (analytics responses). Create with: wrangler kv namespace create CACHE, then add { "kv_namespaces": [{ "binding": "CACHE", "id": "..." }] }
+  // Outbox relay, sweeper, analytics scheduler (all idempotent; Postgres is the source of truth)
+  "triggers": { "crons": ["* * * * *"] }
+}
