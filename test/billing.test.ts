@@ -51,7 +51,7 @@ describe("billing foundation", async () => {
   it("entitlements: count limit enforced with 402; plan upgrade lifts it; non-granting states fall back to Free", async () => {
     const { ws } = await world(t, ["linkedin"]);
     expect((await billing.check(ws, "seats", 1))).toMatchObject({ allowed: false, limit: 1, used: 1, reason: "limit_reached" });
-    await expect(billing.enforce(ws, "seats")).rejects.toMatchObject({ status: 402, code: "PLAN_LIMIT" });
+    await expect(billing.enforce(ws, "seats")).rejects.toMatchObject({ status: 402, code: "PLAN_LIMIT_REACHED" });
     await sub(t, ws, "pro", "incomplete");                                         // unpaid: no access
     expect((await billing.check(ws, "seats")).allowed).toBe(false);
     await t.db.query("UPDATE billing_subscriptions SET status = 'active' WHERE workspace_id = $1", [ws]);

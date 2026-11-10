@@ -122,6 +122,17 @@ export function createBillingPayments(deps: { db: Db; workspaces: WorkspaceServi
       return { cancelAtPeriodEnd: true };
     },
 
+    /** Provider-hosted portal link for the workspace's customer. Owner only; the link is created on demand and never stored. */
+    async portal(a: Actor, workspaceId: string) {
+      await workspaces.authorize(a.id, workspaceId, "billing:manage");
+      const p = need();
+      const sub = (await db.query<{ provider_customer_id: string | null }>("SELECT provider_customer_id FROM billing_subscriptions WHERE workspace_id = $1 AND provider_customer_id IS NOT NULL ORDER BY created_at DESC LIMIT 1", [workspaceId])).rows[0];
+      if (!sub?.provider_customer_id) throw new AppError(409, "NO_BILLING_CUSTOMER", "This workspace has no billing account yet");
+      let out; try { out = await p.createPortalSession(sub.provider_customer_id, deps.returnUrl); } catch (e) { throw providerErr(e); }
+      await auditRepository.record(db, { workspaceId, actorId: a.id, action: "billing.portal.created", entityType: "workspace", entityId: workspaceId, ...(a.requestId ? { requestId: a.requestId } : {}) });
+      return { url: out.url };
+    },
+
     /** Cron: retry events that were received but not applied (crash, provider outage). Exponential backoff, bounded attempts. */
     async sweep() {
       if (!provider) return { due: 0, processed: 0 };

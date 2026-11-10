@@ -23,6 +23,8 @@ export interface PaymentProvider {
   createCheckout(i: { productId: string; email: string; returnUrl: string; metadata: Record<string, string> }): Promise<{ sessionId: string; url: string }>;
   getSubscription(id: string): Promise<ProviderSubscription>;
   cancelAtPeriodEnd(id: string): Promise<void>;
+  /** Provider-hosted customer portal link (manage payment method, invoices, plan). Lifetime is the provider's (Dodo: 24h). */
+  createPortalSession(customerId: string, returnUrl: string): Promise<{ url: string }>;
   /** Throws WebhookSignatureError unless the signature over the RAW body is valid and fresh. */
   verifyWebhook(headers: Record<string, string | undefined>, rawBody: Buffer): ProviderEvent;
 }

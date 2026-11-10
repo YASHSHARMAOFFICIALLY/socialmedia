@@ -62,7 +62,7 @@ export function createBillingService(deps: { db: Db; workspaces: WorkspaceServic
   /** 402 when the plan does not allow it. The error carries the numbers, never anything about payment providers. */
   async function enforce(workspaceId: string, feature: string, quantity = 1, q: Queryable = db) {
     const c = await check(workspaceId, feature, quantity, q);
-    if (!c.allowed) throw new AppError(402, "PLAN_LIMIT", `Your plan does not allow this (${feature}: ${c.reason})`, { feature, limit: c.limit, used: c.used, plan: c.plan });
+    if (!c.allowed) throw new AppError(402, "PLAN_LIMIT_REACHED", `Your plan does not allow this (${feature}: ${c.reason})`, { feature, limit: c.limit, used: c.used, plan: c.plan });
     return c;
   }
 
@@ -73,6 +73,14 @@ export function createBillingService(deps: { db: Db; workspaces: WorkspaceServic
     async recordUsage(workspaceId: string, feature: string, quantity: number, idempotencyKey: string, q: Queryable = db) {
       const r = await q.query("INSERT INTO billing_usage_events (workspace_id, feature_key, quantity, idempotency_key) VALUES ($1,$2,$3,$4) ON CONFLICT (workspace_id, idempotency_key) DO NOTHING", [workspaceId, feature, quantity, idempotencyKey]);
       return { recorded: (r.rowCount ?? 0) > 0 };
+    },
+
+    /** Payments the provider reported (not full invoices: those live in the provider's billing portal). Newest first. */
+    async payments(a: Actor, workspaceId: string, limit = 20) {
+      await workspaces.authorize(a.id, workspaceId, "billing:read");
+      return (await db.query<{ id: string; status: string; amount_minor: string | null; currency: string | null; occurred_at: string }>(
+        "SELECT id, status, amount_minor::text, currency, occurred_at FROM billing_payments WHERE workspace_id = $1 ORDER BY occurred_at DESC, id LIMIT $2", [workspaceId, Math.min(Math.max(limit, 1), 100)])).rows
+        .map((r) => ({ id: r.id, status: r.status, amountMinor: r.amount_minor === null ? null : Number(r.amount_minor), currency: r.currency, occurredAt: r.occurred_at }));
     },
 
     /** Catalog of purchasable plans (active versions) with prices in minor units. */

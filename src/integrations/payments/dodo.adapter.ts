@@ -38,6 +38,11 @@ export function createDodoProvider(o: { apiKey: string; webhookKey: string; mode
         cancelAtPeriodEnd: r.cancel_at_next_billing_date === true, metadata: meta,
       } satisfies ProviderSubscription;
     },
+    async createPortalSession(customerId, returnUrl) {
+      const r = await call<{ link?: string }>("POST", `/customers/${encodeURIComponent(customerId)}/customer-portal/session?return_url=${encodeURIComponent(returnUrl)}&send_email=false`);
+      if (!r.link) throw new ProviderError(502, "Payment provider returned no portal link");
+      return { url: r.link };
+    },
     async cancelAtPeriodEnd(id) { await call("PATCH", `/subscriptions/${encodeURIComponent(id)}`, { cancel_at_next_billing_date: true }); },
 
     verifyWebhook(headers, raw): ProviderEvent {
