@@ -61,6 +61,9 @@ import type { BillingService } from "./modules/billing/billing.service.js";
 import type { BillingPayments } from "./modules/billing/billing.payments.js";
 import { billingRoutes, billingWebhookRoutes } from "./modules/billing/billing.routes.js";
 import { registerBillingDocs } from "./modules/billing/billing.openapi.js";
+import { createMcpAuth, type McpAuth } from "./modules/mcp/mcp.auth.js";
+import { mcpRoutes } from "./modules/mcp/mcp.routes.js";
+import { registerMcpDocs } from "./modules/mcp/mcp.openapi.js";
 import { requireAuth } from "./shared/middleware/auth.js";
 import { workspaceRoutes } from "./modules/workspaces/workspace.routes.js";
 import { registerAuthDocs, registerWorkspaceDocs } from "./modules/workspaces/workspace.openapi.js";
@@ -85,14 +88,15 @@ export interface Engine {
   competitors: { sweep(): Promise<{ due: number; collected: number; failed: number }> };
   webhooks: { sweep(): Promise<{ due: number; delivered: number; failed: number }>; purge(): Promise<number> };
   billing: { sweep(): Promise<{ due: number; processed: number }>; purge(): Promise<number> };
+  mcp: { purge(): Promise<void> };
   recurring: { sweep(): Promise<{ materialized: number; scheduled: number; failed: number; skipped: number }> };
   tokens: { keepAlive(): Promise<{ due: number; refreshed: number; failed: number }>; reencryptStale(): Promise<{ rewritten: number; remaining: number | string }> };
 }
-export interface Deps { cfg: Config; log: Logger; db: Db; auth: Auth; workspaces: WorkspaceService; accounts: AccountService; content: ContentService; publishing: PublishingService; media: MediaService; scheduling: SchedulingService; analytics: AnalyticsService; campaigns: CampaignService; approvals: ApprovalService; notifications: NotificationService; insights: InsightsService; reports: ReportService; recurring: RecurringService; webhooks: WebhookService; competitors: CompetitorService; ai: AiService; billing: BillingService; billingPayments: BillingPayments; storage?: import("./infrastructure/storage/storage.js").ObjectStorage | null; engine: Engine }
+export interface Deps { cfg: Config; log: Logger; db: Db; auth: Auth; workspaces: WorkspaceService; accounts: AccountService; content: ContentService; publishing: PublishingService; media: MediaService; scheduling: SchedulingService; analytics: AnalyticsService; campaigns: CampaignService; approvals: ApprovalService; notifications: NotificationService; insights: InsightsService; reports: ReportService; recurring: RecurringService; webhooks: WebhookService; competitors: CompetitorService; ai: AiService; billing: BillingService; billingPayments: BillingPayments; mcpAuth: McpAuth; storage?: import("./infrastructure/storage/storage.js").ObjectStorage | null; engine: Engine }
 
 let docsRegistered = false;
 
-export function createApp({ cfg, log, db, auth, workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns, approvals, notifications, insights, reports, recurring, webhooks, competitors, ai, billing, billingPayments }: Deps) {
+export function createApp({ cfg, log, db, auth, workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns, approvals, notifications, insights, reports, recurring, webhooks, competitors, ai, billing, billingPayments, mcpAuth }: Deps) {
   if (!docsRegistered) {   // the registry is process-wide: register each module's paths exactly once
     docsRegistered = true;
     registerHealthDocs(registry);
@@ -114,6 +118,7 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
     registerCompetitorDocs(registry);
     registerAiDocs(registry);
     registerBillingDocs(registry);
+    registerMcpDocs(registry);
   }
   const app = express();
   app.disable("x-powered-by");
@@ -173,6 +178,7 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
   const hookLimit = createRateLimiter(db, log);
   app.use("/webhooks", hookLimit({ name: "platform-webhooks", limit: 600, windowS: 60, key: (req) => req.header("cf-connecting-ip") ?? req.ip ?? "unknown" }));
   app.use(billingWebhookRoutes(billingPayments));
+  app.use(mcpRoutes({ auth: mcpAuth, deps: { db, log, workspaces, accounts, content, analytics, billing, billingPayments }, log, publicUrl: cfg.BETTER_AUTH_URL, allowedOrigins: cfg.CORS_ORIGINS, authed, limit }));
   app.use(inboundWebhookRoutes({ db, log, instagramAppSecret: cfg.INSTAGRAM_APP_SECRET, instagramVerifyToken: cfg.INSTAGRAM_WEBHOOK_VERIFY_TOKEN, publicUrl: cfg.BETTER_AUTH_URL ?? "", disconnect: accounts.disconnectByExternalId }));
   app.get("/openapi.json", (_req, res) => res.json(buildSpec()));
   app.get("/docs", docsPage);

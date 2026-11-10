@@ -48,6 +48,7 @@ import { dispatchOutbox, runPublishingSweep } from "./workers/publishing/sweeper
 import { createDodoProvider } from "./integrations/payments/dodo.adapter.js";
 import type { PaymentProvider } from "./integrations/payments/types.js";
 import { createBillingPayments } from "./modules/billing/billing.payments.js";
+import { createMcpAuth } from "./modules/mcp/mcp.auth.js";
 import { createBillingService } from "./modules/billing/billing.service.js";
 import { createAccountService } from "./modules/accounts/account.service.js";
 
@@ -97,6 +98,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
     recurring: { sweep: () => recurring.sweep() },
     webhooks: { sweep: () => webhooks.sweep(), purge: () => webhooks.purge() },
     competitors: { sweep: () => competitors.sweep() },
+    mcp: { purge: () => mcpAuth.purge() },
     billing: { sweep: () => billingPayments.sweep(), purge: () => billingPayments.purge() },
     tokens: { keepAlive: () => accounts.keepAlive(), reencryptStale: () => accounts.reencryptStale() },
   };
@@ -108,7 +110,8 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
   const ai = createAiService({ db, workspaces, content, rules: contentRules, provider: aiProvider, dailyLimit: cfg.AI_DAILY_LIMIT });
   const recurring = createRecurringService({ db, workspaces, content, scheduling, notifications, log });
   const billing = createBillingService({ db, workspaces });
+  const mcpAuth = createMcpAuth({ db, workspaces });
   const provider = o.payments !== undefined ? o.payments : cfg.DODO_API_KEY && cfg.DODO_WEBHOOK_KEY ? createDodoProvider({ apiKey: cfg.DODO_API_KEY, webhookKey: cfg.DODO_WEBHOOK_KEY, mode: cfg.DODO_MODE }) : null;
   const billingPayments = createBillingPayments({ db, workspaces, provider, log, returnUrl: cfg.APP_URL ?? cfg.BETTER_AUTH_URL ?? "" });
-  return { cfg, log, db, auth: createAuth(db, cfg, mailer), workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns: createCampaignService({ db, workspaces, analytics }), approvals, notifications, reports, recurring, webhooks, competitors, ai, billing, billingPayments, insights: createInsightsService({ db, workspaces, analytics }), storage, engine };
+  return { cfg, log, db, auth: createAuth(db, cfg, mailer), workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns: createCampaignService({ db, workspaces, analytics }), approvals, notifications, reports, recurring, webhooks, competitors, ai, billing, billingPayments, mcpAuth, insights: createInsightsService({ db, workspaces, analytics }), storage, engine };
 }

@@ -8,12 +8,13 @@ const ADMIN = ["workspace:update", "members:manage", "accounts:manage", "audit:r
 
 const BILLING_READ = ["billing:read"] as const;
 const BILLING_MANAGE = ["billing:manage"] as const;
+const MCP_MANAGE = ["mcp:manage"] as const;
 
-export type Permission = (typeof READ)[number] | (typeof ANALYTICS)[number] | (typeof WRITE)[number] | (typeof ADMIN)[number] | (typeof BILLING_READ)[number] | (typeof BILLING_MANAGE)[number] | "workspace:delete";
+export type Permission = (typeof READ)[number] | (typeof ANALYTICS)[number] | (typeof WRITE)[number] | (typeof ADMIN)[number] | (typeof BILLING_READ)[number] | (typeof BILLING_MANAGE)[number] | (typeof MCP_MANAGE)[number] | "workspace:delete";
 
 export const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
-  owner: new Set([...READ, ...ANALYTICS, ...WRITE, ...ADMIN, ...BILLING_READ, ...BILLING_MANAGE, "workspace:delete"]),
-  admin: new Set([...READ, ...ANALYTICS, ...WRITE, ...ADMIN, ...BILLING_READ]),
+  owner: new Set([...READ, ...ANALYTICS, ...WRITE, ...ADMIN, ...BILLING_READ, ...BILLING_MANAGE, ...MCP_MANAGE, "workspace:delete"]),
+  admin: new Set([...READ, ...ANALYTICS, ...WRITE, ...ADMIN, ...BILLING_READ, ...MCP_MANAGE]),
   editor: new Set([...READ, ...ANALYTICS, ...WRITE]),
   analyst: new Set([...READ, ...ANALYTICS]),
   viewer: new Set([...READ]),
