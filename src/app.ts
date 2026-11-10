@@ -59,6 +59,7 @@ import { aiRoutes } from "./modules/ai/ai.routes.js";
 import { registerAiDocs } from "./modules/ai/ai.openapi.js";
 import type { BillingService } from "./modules/billing/billing.service.js";
 import type { BillingPayments } from "./modules/billing/billing.payments.js";
+import { billingAdminRoutes } from "./modules/billing/billing.admin.js";
 import { billingRoutes, billingWebhookRoutes } from "./modules/billing/billing.routes.js";
 import { registerBillingDocs } from "./modules/billing/billing.openapi.js";
 import { createMcpAuth, type McpAuth } from "./modules/mcp/mcp.auth.js";
@@ -178,6 +179,7 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
   const hookLimit = createRateLimiter(db, log);
   app.use("/webhooks", hookLimit({ name: "platform-webhooks", limit: 600, windowS: 60, key: (req) => req.header("cf-connecting-ip") ?? req.ip ?? "unknown" }));
   app.use(billingWebhookRoutes(billingPayments));
+  app.use(billingAdminRoutes({ db, pay: billingPayments, opsToken: cfg.OPS_TOKEN }));
   app.use(mcpRoutes({ auth: mcpAuth, deps: { db, log, workspaces, accounts, content, analytics, billing, billingPayments }, log, publicUrl: cfg.BETTER_AUTH_URL, allowedOrigins: cfg.CORS_ORIGINS, authed, limit }));
   app.use(inboundWebhookRoutes({ db, log, instagramAppSecret: cfg.INSTAGRAM_APP_SECRET, instagramVerifyToken: cfg.INSTAGRAM_WEBHOOK_VERIFY_TOKEN, publicUrl: cfg.BETTER_AUTH_URL ?? "", disconnect: accounts.disconnectByExternalId }));
   app.get("/openapi.json", (_req, res) => res.json(buildSpec()));

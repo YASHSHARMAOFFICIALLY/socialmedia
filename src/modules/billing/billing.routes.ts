@@ -14,6 +14,8 @@ export function billingRoutes(svc: BillingService, pay: BillingPayments, authn: 
   r.get("/billing/plans", authn, async (_req, res) => { res.json({ data: await svc.plans() }); });
   r.get("/workspaces/:workspaceId/billing", authn, validate({ params: wsParam }), async (req, res) => { res.json({ data: await svc.overview(actor(req), ws(req)) }); });
   r.post("/workspaces/:workspaceId/billing/checkout", authn, validate({ params: wsParam, body: checkoutBody }), async (req, res) => { res.status(201).json({ data: await pay.checkout(actor(req), ws(req), req.body) }); });
+  r.get("/workspaces/:workspaceId/billing/payments", authn, validate({ params: wsParam, query: z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) }) }), async (req, res) => { res.json({ data: await svc.payments(actor(req), ws(req), (req.query as unknown as { limit: number }).limit) }); });
+  r.post("/workspaces/:workspaceId/billing/portal", authn, validate({ params: wsParam }), async (req, res) => { res.status(201).json({ data: await pay.portal(actor(req), ws(req)) }); });
   r.post("/workspaces/:workspaceId/billing/cancel", authn, validate({ params: wsParam }), async (req, res) => { res.json({ data: await pay.cancel(actor(req), ws(req)) }); });
   return r;
 }
