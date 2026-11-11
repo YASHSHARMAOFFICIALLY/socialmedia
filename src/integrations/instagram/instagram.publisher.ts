@@ -6,7 +6,7 @@ import { GRAPH } from "./instagram.auth.js";
 // Verified (Instagram Platform "Content Publishing" docs):
 //  - Media is fetched BY META from a public URL (image_url / video_url), so it must be reachable when the container is created.
 //  - POST /<IG_ID>/media (image_url|video_url, caption, media_type) -> { id: container }; JPEG is the only supported image format.
-//  - Reels: media_type=REELS + video_url. Carousel: child containers (is_carousel_item=true) then media_type=CAROUSEL + children (max 20).
+//  - Reels: media_type=REELS + video_url. Carousel: child containers (is_carousel_item=true; videos as media_type=VIDEO) then media_type=CAROUSEL + children (max 20).
 //  - GET /<container>?fields=status_code -> FINISHED | IN_PROGRESS | ERROR | EXPIRED
 //  - POST /<IG_ID>/media_publish {creation_id} -> { id: media id }. Rate limit enforced here (100 per 24h per docs; check /content_publishing_limit).
 const bearer = (t: string) => ({ Authorization: `Bearer ${t}`, "Content-Type": "application/json" });
@@ -23,7 +23,9 @@ export function createInstagramPublisher(f: typeof fetch = fetch, o: { pollMs?: 
     };
     const container = async (m: (typeof media)[number], extra: object) => {
       const url = await m.url();
-      const body = m.kind === "image" ? { image_url: url, ...extra } : { video_url: url, media_type: "REELS", ...extra };
+      // A carousel child video is media_type VIDEO; a standalone video is a REEL.
+      const carouselChild = (extra as { is_carousel_item?: boolean }).is_carousel_item === true;
+      const body = m.kind === "image" ? { image_url: url, ...extra } : { video_url: url, media_type: carouselChild ? "VIDEO" : "REELS", ...extra };
       const id = (await post(`${ig}/media`, body)).id;
       if (!id) throw new PlatformError("permanent", "instagram returned no container id");
       return id;
@@ -44,7 +46,6 @@ export function createInstagramPublisher(f: typeof fetch = fetch, o: { pollMs?: 
     if (media.length === 1) {
       creationId = await container(media[0]!, { caption });
     } else {
-      if (media.some((m) => m.kind !== "image")) throw new PlatformError("permanent", "This integration publishes carousels of images only");
       const children: string[] = [];
       for (const m of media) { const id = await container(m, { is_carousel_item: true }); await waitFinished(id); children.push(id); }
       const id = (await post(`${ig}/media`, { media_type: "CAROUSEL", children: children.join(","), caption })).id;

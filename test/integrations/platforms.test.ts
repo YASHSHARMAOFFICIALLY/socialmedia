@@ -242,4 +242,11 @@ describe("Instagram adapter (mocked API)", () => {
     const h = harness(() => Response.json({ data: [{ id: "M7", caption: "Hello", timestamp: new Date().toISOString(), permalink: "https://instagram.com/p/z" }] }));
     expect(await ad(h.f).reconcile!({ accessToken: "T", account: { externalId: "u1", metadata: {} }, content: content(), idempotencyKey: "k", since: new Date(Date.now() - 60_000) })).toMatchObject({ externalId: "M7" });
   });
+  it("carousel with a video child creates it as media_type VIDEO (not REELS) with is_carousel_item", async () => {
+    const h = harness((c) => (c.url.includes("status_code") ? Response.json({ status_code: "FINISHED" }) : c.url.endsWith("media_publish") ? Response.json({ id: "M1" }) : Response.json({ id: `C${Math.random()}` })));
+    await createInstagramAdapter({ appId: "a", appSecret: "s", pollMs: 1 } as never, h.f).publish!(input(content(), [mk("image", 10), mk("video", 10)]));
+    const kids = h.calls.filter((c) => c.url.endsWith("/media") && (c.body as { is_carousel_item?: boolean }).is_carousel_item).map((c) => c.body as { media_type?: string; video_url?: string });
+    expect(kids).toHaveLength(2);
+    expect(kids.find((k) => k.video_url)?.media_type).toBe("VIDEO");
+  });
 });

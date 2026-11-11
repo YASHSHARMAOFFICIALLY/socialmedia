@@ -50,7 +50,7 @@ describe("Instagram rules", () => {
   it("JPEG only; carousels up to 20 images; unconfirmed video specs are warnings", () => {
     expect(codes("instagram", { media: [img("image/png")] }, "error")).toContain("IMAGE_FORMAT");
     expect(codes("instagram", { media: Array(21).fill(img()) }, "error")).toContain("TOO_MANY_ITEMS");
-    expect(codes("instagram", { media: [img(), vid()] }, "error")).toContain("CAROUSEL_IMAGES_ONLY");
+    expect(codes("instagram", { media: [img(), vid()] }, "error")).not.toContain("CAROUSEL_IMAGES_ONLY");   // carousels may mix images and videos
     expect(codes("instagram", { media: [vid()] }, "error")).toEqual([]);
     expect(codes("instagram", { media: [vid()] }, "warning")).toContain("VIDEO_SPECS_UNVERIFIED");
   });
