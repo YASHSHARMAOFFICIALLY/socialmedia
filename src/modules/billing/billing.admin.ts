@@ -7,7 +7,7 @@ import { validate } from "../../shared/middleware/validate.js";
 import { auditRepository } from "../audit/audit.repository.js";
 import type { BillingPayments } from "./billing.payments.js";
 
-const eq = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const eq = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };   // compare BYTE lengths: non-ASCII input must not throw
 const price = z.object({ currency: z.enum(["INR", "USD"]), interval: z.enum(["month", "year"]), amountMinor: z.number().int().min(0).max(100_000_000_00) });
 const entitlement = z.object({ feature: z.string().regex(/^[a-z_]{2,40}$/), kind: z.enum(["flag", "value", "count", "metered"]), limit: z.number().int().min(0).nullable() });
 export const newVersionBody = z.object({ prices: z.array(price).max(8), entitlements: z.array(entitlement).min(1).max(40) })
@@ -35,7 +35,7 @@ export function billingAdminRoutes(d: { db: Db; pay: BillingPayments; opsToken?:
   });
   r.post("/admin/billing/webhook-events/:id/retry", validate({ params: z.object({ id: z.uuid() }) }), async (req, res) => {
     const id = (req.params as { id: string }).id;
-    const u = await d.db.query("UPDATE billing_webhook_events SET status = 'received', attempts = 0, next_attempt_at = now(), last_error = NULL WHERE id = $1 AND status IN ('failed','received')", [id]);
+    const u = await d.db.query("UPDATE billing_webhook_events SET status = 'received', attempts = 0, next_attempt_at = now(), last_error = NULL WHERE id = $1 AND status IN ('failed','received','ignored')", [id]);
     if (!u.rowCount) throw notFound("Event");
     await audit(req, "billing.admin.webhook_retry", id, {});
     res.json({ data: await d.pay.sweep() });

@@ -110,7 +110,45 @@ describe("billing payments (Dodo adapter, mocked HTTP)", async () => {
     dodo.st.subs["sub_C"] = { subscription_id: "sub_C", status: "active", product_id: "pdt_pro", currency: "INR", metadata: { billing_subscription_id: "00000000-0000-0000-0000-000000000000" } };
     expect((await hook("subscription.active", { subscription_id: "sub_C" })).status).toBe(200);
     expect((await t.db.query("SELECT 1 FROM billing_subscriptions WHERE provider_subscription_id IN ('sub_B','sub_C')")).rowCount).toBe(0);
-    expect((await t.db.query<{ status: string }>("SELECT status FROM billing_webhook_events WHERE event_id = (SELECT event_id FROM billing_webhook_events ORDER BY received_at DESC LIMIT 1)")).rows[0]!.status).toBe("ignored");
+    expect((await t.db.query<{ status: string }>("SELECT status FROM billing_webhook_events WHERE event_id = (SELECT event_id FROM billing_webhook_events ORDER BY received_at DESC LIMIT 1)")).rows[0]!.status).toBe("failed");   // a PAID subscription we cannot map is loud (failed + error log), never silently ignored
+    expect((await t.db.query("SELECT 1 FROM billing_webhook_events WHERE status = 'failed' AND last_error LIKE '%matches no%'")).rowCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("stale checkout tab: paying plan A after starting plan B grants A (the provider's product decides), never 'paid but still free'", async () => {
+    const { owner, ws } = await world(t, ["linkedin"]);
+    await setRef("pro", "pdt_pro"); await setRef("starter", "pdt_starter");
+    const a = (await owner.agent.post(`/workspaces/${ws}/billing/checkout`).send({ plan: "pro", currency: "INR" })).body.data.subscriptionId as string;
+    await owner.agent.post(`/workspaces/${ws}/billing/checkout`).send({ plan: "starter", currency: "INR" });   // rewrites the incomplete row to starter
+    dodo.st.subs["sub_S"] = { subscription_id: "sub_S", status: "active", product_id: "pdt_pro", currency: "INR", metadata: { billing_subscription_id: a } };
+    await hook("subscription.active", { subscription_id: "sub_S" });
+    expect((await t.deps.billing.check(ws, "seats")).plan).toBe("pro");
+  });
+
+  it("a plan change made at the provider (portal) re-maps the local plan on the next event", async () => {
+    const { owner, ws } = await world(t, ["linkedin"]);
+    await setRef("pro", "pdt_pro"); await setRef("starter", "pdt_starter");
+    const id = (await owner.agent.post(`/workspaces/${ws}/billing/checkout`).send({ plan: "pro", currency: "INR" })).body.data.subscriptionId as string;
+    dodo.st.subs["sub_P"] = { subscription_id: "sub_P", status: "active", product_id: "pdt_pro", currency: "INR", metadata: { billing_subscription_id: id } };
+    await hook("subscription.active", { subscription_id: "sub_P" });
+    expect((await t.deps.billing.check(ws, "seats")).plan).toBe("pro");
+    dodo.st.subs["sub_P"]!["product_id"] = "pdt_starter";
+    await hook("subscription.plan_changed", { subscription_id: "sub_P" });
+    expect((await t.deps.billing.check(ws, "seats")).plan).toBe("starter");
+  });
+
+  it("daily safety-net re-sync: a cancellation whose webhook never arrived is applied by the sweep", async () => {
+    const { owner, ws } = await world(t, ["linkedin"]);
+    await setRef("pro", "pdt_pro");
+    const id = (await owner.agent.post(`/workspaces/${ws}/billing/checkout`).send({ plan: "pro", currency: "INR" })).body.data.subscriptionId as string;
+    dodo.st.subs["sub_R"] = { subscription_id: "sub_R", status: "active", product_id: "pdt_pro", currency: "INR", metadata: { billing_subscription_id: id } };
+    await hook("subscription.active", { subscription_id: "sub_R" });
+    expect((await t.deps.billing.check(ws, "seats")).plan).toBe("pro");
+    dodo.st.subs["sub_R"]!["status"] = "expired";                                   // happened at the provider; the webhook was lost
+    await t.deps.engine.billing.sweep();
+    expect((await t.deps.billing.check(ws, "seats")).plan).toBe("pro");            // synced moments ago: not re-read yet
+    await t.db.query("UPDATE billing_subscriptions SET synced_at = now() - interval '2 days' WHERE id = $1", [id]);
+    await t.deps.engine.billing.sweep();
+    expect((await t.deps.billing.check(ws, "seats")).plan).toBe("free");
   });
 
   it("provider outage: 200 is still returned, the event is retried by the sweeper and applied exactly once", async () => {
@@ -126,6 +164,7 @@ describe("billing payments (Dodo adapter, mocked HTTP)", async () => {
     expect((await ev()).last_error).not.toContain("secret");                          // provider body never stored
     expect((await t.deps.billing.check(ws, "seats")).plan).toBe("free");
     dodo.st.failGet = false;
+    await t.db.query("DELETE FROM billing_webhook_events WHERE event_id <> 'evt_retry'");     // earlier tests leave deliberately-failed events behind
     await t.db.query("UPDATE billing_webhook_events SET next_attempt_at = now() - interval '1 second' WHERE event_id = 'evt_retry'");
     expect(await t.deps.engine.billing.sweep()).toMatchObject({ due: 1 });
     expect((await ev()).status).toBe("processed");
