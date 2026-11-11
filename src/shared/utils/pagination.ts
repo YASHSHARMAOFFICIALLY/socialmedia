@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PgDate } from "../../infrastructure/database/db.js";
 import { badRequest } from "../errors/errors.js";
 
 /** Keyset pagination: opaque cursor encodes the last row's sort key. */
@@ -7,7 +8,9 @@ export const pageQuery = z.object({
   cursor: z.string().max(500).optional(),
 });
 
-export const encodeCursor = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
+/** PgDate keeps its microseconds in the cursor (see db.ts); JSON.stringify would round it to ms before a replacer sees it. */
+export const encodeCursor = (v: unknown) =>
+  Buffer.from(JSON.stringify(v, function (this: Record<string, unknown>, k, val) { const o = this[k]; return o instanceof PgDate ? o.raw : val; })).toString("base64url");
 export function decodeCursor<T>(c: string | undefined, schema: z.ZodType<T>): T | undefined {
   if (!c) return undefined;
   try {

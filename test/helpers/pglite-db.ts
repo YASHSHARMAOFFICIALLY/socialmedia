@@ -1,9 +1,9 @@
 import { PGlite } from "@electric-sql/pglite";
-import type { Db, Queryable } from "../../src/infrastructure/database/db.js";
+import { parseTimestamptz, type Db, type Queryable } from "../../src/infrastructure/database/db.js";
 
 /** In-process Postgres (WASM): real SQL semantics, no Docker, no network. */
 export async function createTestDb(): Promise<{ db: Db; close: () => Promise<void> }> {
-  const pg = new PGlite();
+  const pg = new PGlite({ parsers: { 1184: parseTimestamptz } });
   await pg.waitReady;
   const wrap = (c: { query: PGlite["query"]; exec: PGlite["exec"] }): Queryable => ({
     query: async <R,>(t: string, p?: readonly unknown[]) => {

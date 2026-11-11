@@ -1,5 +1,16 @@
 import pg from "pg";
 
+/**
+ * timestamptz as a Date that keeps Postgres' microseconds. JSON/API output is unchanged (ms ISO via toJSON), but keyset
+ * cursors encode `raw`: a ms-truncated cursor would re-return or skip rows that share a transaction's `now()`.
+ */
+export class PgDate extends Date {
+  constructor(readonly raw: string) { super(raw.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00")); }
+}
+export const parseTimestamptz = (v: string): Date => (/^\d{4}-/.test(v) ? new PgDate(v) : new Date(v));
+const TIMESTAMPTZ = 1184;
+pg.types.setTypeParser(TIMESTAMPTZ, parseTimestamptz);
+
 export interface QueryResult<R> { rows: R[]; rowCount: number; command?: string }
 export interface Queryable {
   query<R = Record<string, unknown>>(text: string, params?: readonly unknown[]): Promise<QueryResult<R>>;
