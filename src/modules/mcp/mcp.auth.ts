@@ -3,7 +3,7 @@ import type { Db } from "../../infrastructure/database/db.js";
 import { AppError, badRequest, notFound } from "../../shared/errors/errors.js";
 import { auditRepository } from "../audit/audit.repository.js";
 import type { Actor, WorkspaceService } from "../workspaces/workspace.service.js";
-import { SCOPES, type Principal } from "./mcp.types.js";
+import { DEFAULT_SCOPES, SCOPES, type Principal } from "./mcp.types.js";
 
 const ACCESS_TTL_S = 3600;                       // device-flow access tokens live one hour; the CLI refreshes
 const DEVICE_GRANT_TTL_S = 30 * 86400;           // refresh token lifetime (rotating)
@@ -64,7 +64,7 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
       if (q.response_type !== "code") throw badRequest("response_type must be code");
       if (!q.code_challenge || q.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(q.code_challenge)) throw badRequest("PKCE with code_challenge_method=S256 is required");
       const requested = (q.scope ?? "").split(" ").filter(Boolean);
-      const scopes = normalizeScopes(requested.length ? requested : SCOPES.filter((x) => x !== "billing:portal"));
+      const scopes = normalizeScopes(requested.length ? requested : DEFAULT_SCOPES);
       return { clientName: c.name, redirectUri: q.redirect_uri, codeChallenge: q.code_challenge, scopes };
     }
 
@@ -114,7 +114,7 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
 
     // ---- Device authorization (RFC 8628), for the local CLI
     async deviceStart(i: { clientName: string; scopes: readonly string[] }, verificationBase: string) {
-      const scopes = normalizeScopes(i.scopes.length ? i.scopes : SCOPES.filter((x) => x !== "billing:portal"))   // least privilege by default; the portal link is opt-in;
+      const scopes = normalizeScopes(i.scopes.length ? i.scopes : DEFAULT_SCOPES)   // least privilege by default; the portal link is opt-in;
       const device = secret("dsd"), code = userCode();
       await db.query("INSERT INTO mcp_device_codes (device_code_hash, user_code, client_name, scopes, expires_at) VALUES ($1,$2,$3,$4, now() + make_interval(secs => $5))", [sha256(device), code, i.clientName.slice(0, 80), scopes, DEVICE_CODE_TTL_S]);
       return { device_code: device, user_code: code, verification_uri: `${verificationBase}/mcp/device`, verification_uri_complete: `${verificationBase}/mcp/device?user_code=${code}`, expires_in: DEVICE_CODE_TTL_S, interval: POLL_INTERVAL_S };

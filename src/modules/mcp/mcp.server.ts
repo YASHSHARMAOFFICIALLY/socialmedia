@@ -4,11 +4,12 @@ import type { McpDeps } from "./mcp.deps.js";
 import { registerPrompts } from "./mcp.prompts.js";
 import { registerResources } from "./mcp.resources.js";
 import { analyticsTools } from "./mcp.tools.analytics.js";
+import { contentTools } from "./mcp.tools.content.js";
 import { billingTools } from "./mcp.tools.billing.js";
 import type { Principal, ToolDef } from "./mcp.types.js";
 
 /** Add a tool here (or in a new tools file listed here); nothing else in the server changes. */
-export const TOOLS: ToolDef[] = [...analyticsTools, ...billingTools];
+export const TOOLS: ToolDef[] = [...analyticsTools, ...contentTools, ...billingTools];
 
 /** One server per request/caller. Holds no state: safe for concurrent customers on any number of Worker isolates. */
 export function buildMcpServer(deps: McpDeps, principal: Principal): McpServer {

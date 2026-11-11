@@ -36,13 +36,13 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
     return post;
   };
 
-  it("registers 15 tools, 6 resources and 4 prompts with read-only annotations", async () => {
+  it("registers 17 tools, 6 resources and 4 prompts with read-only annotations", async () => {
     const { owner } = await world(t, ["x"]);
     const c = await connect(principal(owner));
     const tools = (await c.listTools()).tools;
-    expect(tools.map((x) => x.name).sort()).toEqual(["compare_platform_performance", "create_billing_portal_session", "get_account_analytics", "get_analytics_overview", "get_available_plans", "get_current_plan", "get_engagement_trends", "get_follower_growth", "get_post_analytics", "get_subscription", "get_top_posts", "get_usage_summary", "list_invoices", "list_recent_posts", "list_social_accounts"]);
-    expect(TOOLS.length).toBe(15);
-    for (const tool of tools) { expect(tool.description!.length, tool.name).toBeGreaterThan(40); expect(tool.annotations?.readOnlyHint, tool.name).toBe(tool.name !== "create_billing_portal_session"); }   // the portal tool mints a link and writes an audit row: not read-only
+    expect(tools.map((x) => x.name).sort()).toEqual(["compare_platform_performance", "create_billing_portal_session", "create_draft_post", "get_account_analytics", "get_analytics_overview", "get_available_plans", "get_current_plan", "get_engagement_trends", "get_follower_growth", "get_post", "get_post_analytics", "get_subscription", "get_top_posts", "get_usage_summary", "list_invoices", "list_recent_posts", "list_social_accounts"]);
+    expect(TOOLS.length).toBe(17);
+    for (const tool of tools) { expect(tool.description!.length, tool.name).toBeGreaterThan(40); expect(tool.annotations?.readOnlyHint, tool.name).toBe(!["create_billing_portal_session", "create_draft_post"].includes(tool.name)); }   // the portal tool mints a link and writes an audit row: not read-only
     expect((await c.listResources()).resources.map((r) => r.uri).sort()).toEqual(["analytics://metric-definitions", "analytics://overview", "analytics://top-posts", "billing://subscription", "billing://usage", "social://accounts"]);
     expect((await c.listPrompts()).prompts.map((p) => p.name).sort()).toEqual(["content-repurposing", "cross-platform-content-analysis", "subscription-usage-review", "weekly-performance-review"]);
   });
@@ -81,6 +81,26 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
     expect((await call(c, "get_follower_growth")).data.data.metric).toBe("followers");
     expect((await call(c, "get_engagement_trends", { metric: "likes" })).data.data.metric).toBe("likes");
     expect((await call(c, "list_recent_posts")).data.items[0]).toMatchObject({ id: post, preview: "hello" });
+  });
+
+  it("create_draft_post creates a DRAFT only (never a publication), needs content:write and an editor role; get_post reads it back", async () => {
+    const { owner, ws } = await world(t, ["x"]);
+    await upgrade(ws);
+    const acc = (await t.db.query<{ id: string }>("SELECT id FROM social_accounts WHERE workspace_id = $1 LIMIT 1", [ws])).rows[0]!.id;
+    const c = await connect(principal(owner));
+    const made = await call(c, "create_draft_post", { body: "Draft from an assistant", hashtags: ["ai"], accountIds: [acc] });
+    expect(made.isError).toBe(false);
+    expect(made.data.status).toBe("draft");
+    expect(made.data.note).toMatch(/NOT been published/);
+    expect((await t.db.query("SELECT 1 FROM publishing_jobs WHERE workspace_id = $1", [ws])).rowCount).toBe(0);
+    const got = await call(c, "get_post", { postId: made.data.id });
+    expect(got.data).toMatchObject({ id: made.data.id, body: "Draft from an assistant" });
+    const readOnly = await connect(principal(owner, { scopes: ["content:read"] }));
+    expect((await call(readOnly, "create_draft_post", { body: "x" })).isError).toBe(true);                 // scope not granted
+    const viewer = await t.newUser("dv");
+    await t.db.query("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,'viewer')", [ws, viewer.id]);
+    const vc = await connect(principal(viewer));
+    expect((await call(vc, "create_draft_post", { workspaceId: ws, body: "x" })).isError).toBe(true);        // viewer role cannot write
   });
 
   it("validation: bad dates, ranges over 366 days and unknown metrics are errors, not fabricated data", async () => {

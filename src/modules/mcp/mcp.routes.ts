@@ -6,10 +6,10 @@ import { validate } from "../../shared/middleware/validate.js";
 import { OAuthError, sha256, type McpAuth } from "./mcp.auth.js";
 import type { McpDeps } from "./mcp.deps.js";
 import { buildMcpServer } from "./mcp.server.js";
-import { SCOPES } from "./mcp.types.js";
+import { DEFAULT_SCOPES, SCOPES } from "./mcp.types.js";
 
 const wsParam = z.object({ workspaceId: z.uuid() });
-export const createTokenBody = z.object({ name: z.string().trim().min(1).max(80), scopes: z.array(z.enum(SCOPES)).min(1).default([...SCOPES]), expiresInDays: z.number().int().min(1).max(90).default(30) });
+export const createTokenBody = z.object({ name: z.string().trim().min(1).max(80), scopes: z.array(z.enum(SCOPES)).min(1).default([...DEFAULT_SCOPES]), expiresInDays: z.number().int().min(1).max(90).default(30) });
 const actor = (req: Request) => ({ id: req.user!.id, email: req.user!.email, requestId: req.id });
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const baseUrl = (req: Request, configured?: string) => configured ?? `${req.protocol}://${req.get("host")}`;

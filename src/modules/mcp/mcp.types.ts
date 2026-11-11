@@ -6,7 +6,9 @@ import type { McpDeps } from "./mcp.deps.js";
 export interface Principal { userId: string; email: string; scopes: readonly string[]; workspaceId?: string | undefined; clientId?: string | undefined }
 
 /** Scopes a token may carry. Each tool names exactly one. */
-export const SCOPES = ["accounts:read", "analytics:read", "content:read", "billing:read", "billing:portal"] as const;
+export const SCOPES = ["accounts:read", "analytics:read", "content:read", "content:write", "billing:read", "billing:portal"] as const;
+/** What a client gets when it does not ask for specific scopes: everything read-only. Writing drafts and the billing portal must be requested explicitly. */
+export const DEFAULT_SCOPES = SCOPES.filter((s) => s !== "billing:portal" && s !== "content:write");
 
 export interface ToolCtx { principal: Principal; actor: Actor; workspaceId: string; deps: McpDeps }
 
