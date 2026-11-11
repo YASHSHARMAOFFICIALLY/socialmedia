@@ -72,7 +72,9 @@ export function createWorkspaceService(db: Db, mailer: Mailer, appUrl: string, g
         if (live) throw new AppError(409, "ACTIVE_SUBSCRIPTION", "Cancel the subscription before deleting the workspace");
         await auditRepository.record(q, { workspaceId: null, actorId: a.id, action: "workspace.deleted", entityType: "workspace", entityId: workspaceId, metadata: { name: ws.name }, ...(a.requestId ? { requestId: a.requestId } : {}) });
         // These reference accounts/media without ON DELETE CASCADE, so they go first; everything else cascades from the workspace row.
-        for (const t of ["publishing_jobs", "post_media", "post_variants"]) await q.query(`DELETE FROM ${t} WHERE workspace_id = $1`, [workspaceId]);
+        await q.query("DELETE FROM publishing_jobs WHERE workspace_id = $1", [workspaceId]);
+        await q.query("DELETE FROM post_media WHERE workspace_id = $1", [workspaceId]);
+        await q.query("DELETE FROM post_variants WHERE workspace_id = $1", [workspaceId]);
         await q.query("DELETE FROM workspaces WHERE id = $1", [workspaceId]);
       });
     },
