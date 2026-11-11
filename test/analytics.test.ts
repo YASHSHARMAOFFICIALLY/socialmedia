@@ -168,7 +168,7 @@ describe("analytics pipeline", async () => {
     void a;
   });
 
-  it("daily/weekly/monthly trends: bucket changes, first bucket unknown (null, not 0), partial buckets flagged", async () => {
+  it("daily/weekly/monthly trends: bucket changes, first bucket of a post counts its whole value (counters start at 0 at publish), partial buckets flagged", async () => {
     const { t } = await mk([{ platform: "x", opts: xPost() }]);
     const { owner, ws, accounts } = await world(t, ["x"]);
     const p = await publishedJob(t, ws, owner, accounts.x!, "x", { publishedDaysAgo: 10 });
@@ -181,7 +181,7 @@ describe("analytics pipeline", async () => {
     expect(byBucket[iso(5).slice(0, 10)]).toBe(15);                    // 25 - 10
     expect(byBucket[iso(3).slice(0, 10)]).toBe(35);                    // 60 - 25 (gap days carry no sample, so the change spans them)
     expect(day.kind).toBe("gained_in_bucket");
-    expect(pts[0]!.value).toBeNull();                                  // earliest bucket: nothing before it to compare with
+    expect(pts[0]!.value).toBe(10);                                    // earliest bucket: the counter started at 0 when the post was published, so the first sample IS the gain
     const week = (await analytics(owner, ws, `/trends?metric=likes&grain=week&from=${iso(14).slice(0, 10)}&to=${today()}`)).body.data;
     expect(week.byPlatform.x.length).toBeGreaterThanOrEqual(1);
     const month = (await analytics(owner, ws, `/trends?metric=likes&grain=month&from=${iso(40).slice(0, 10)}&to=${today()}`)).body.data;

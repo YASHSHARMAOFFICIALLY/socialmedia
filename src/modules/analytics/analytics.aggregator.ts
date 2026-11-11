@@ -4,7 +4,8 @@ const GRAINS = ["day", "week", "month"] as const;
 
 /**
  * Rebuilds the roll-ups for one target (idempotent; derived data only). For each metric and bucket: the last known value, and the
- * change since the previous bucket. delta is NULL (not 0) for the first bucket or when either side has no value.
+ * change since the previous bucket. A post's lifetime counters start at 0 at publish, so its first bucket's delta is its whole value;
+ * for account series (followers) the first delta is NULL, and delta is NULL (not 0) whenever either side has no value.
  * Buckets are UTC calendar days / ISO weeks / months. Only the last 400 days are touched.
  */
 export async function rebuildAggregates(q: Queryable, targetId: string) {
@@ -12,7 +13,7 @@ export async function rebuildAggregates(q: Queryable, targetId: string) {
     await q.query(
       `INSERT INTO analytics_aggregates (workspace_id, scope, target_id, social_account_id, platform, job_id, metric_key, grain, bucket_start, last_value, delta, samples)
        SELECT workspace_id, scope, target_id, social_account_id, platform, job_id, metric_key, $2, bucket_start, last_value,
-              last_value - LAG(last_value) OVER (PARTITION BY metric_key ORDER BY bucket_start) AS delta, samples
+              CASE WHEN scope = 'post' AND row_number() OVER w = 1 THEN last_value ELSE last_value - LAG(last_value) OVER w END AS delta, samples
          FROM (
            SELECT s.workspace_id, s.scope, s.target_id, s.social_account_id, s.platform, s.job_id, m.metric_key,
                   date_trunc($2, m.collected_at AT TIME ZONE 'UTC')::date AS bucket_start,
@@ -22,6 +23,7 @@ export async function rebuildAggregates(q: Queryable, targetId: string) {
             WHERE s.target_id = $1 AND m.period = 'lifetime' AND m.collected_at >= now() - interval '400 days'
             GROUP BY s.workspace_id, s.scope, s.target_id, s.social_account_id, s.platform, s.job_id, m.metric_key, date_trunc($2, m.collected_at AT TIME ZONE 'UTC')::date
          ) b
+         WINDOW w AS (PARTITION BY metric_key ORDER BY bucket_start)
        ON CONFLICT (target_id, metric_key, grain, bucket_start) DO UPDATE SET last_value = EXCLUDED.last_value, delta = EXCLUDED.delta, samples = EXCLUDED.samples, computed_at = now()`,
       [targetId, grain]);
   }

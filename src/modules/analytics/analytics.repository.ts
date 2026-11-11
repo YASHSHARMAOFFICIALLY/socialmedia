@@ -106,7 +106,7 @@ export const analyticsRepository = {
   accountLatest: (q: Queryable, workspaceId: string, metric: string, to: string, platform?: string, accountId?: string) =>
     q.query<{ social_account_id: string; platform: string; last_value: string | null; bucket: string }>(
       `SELECT DISTINCT ON (target_id) social_account_id, platform, last_value::text, bucket_start::text AS bucket FROM analytics_aggregates
-        WHERE workspace_id = $1 AND scope = 'account' AND metric_key = $2 AND grain = 'day' AND bucket_start <= $3::date AND ($4::text IS NULL OR platform = $4) AND ($5::uuid IS NULL OR social_account_id = $5)
+        WHERE workspace_id = $1 AND scope = 'account' AND metric_key = $2 AND grain = 'day' AND bucket_start <= $3::date AND last_value IS NOT NULL AND ($4::text IS NULL OR platform = $4) AND ($5::uuid IS NULL OR social_account_id = $5)
         ORDER BY target_id, bucket_start DESC`, [workspaceId, metric, to, platform ?? null, accountId ?? null]),
   /** Latest normalized rows of one post destination, WITH availability (this is where "unavailable" is visible). */
   postLatestMetrics: (q: Queryable, workspaceId: string, jobId: string) =>
