@@ -48,6 +48,7 @@ export function createPublishingService(deps: { db: Db; workspaces: WorkspaceSer
         const live = await repo.blockedVariantIds(q, workspaceId, postId);
         const targets = selected.filter((v) => !live.has(v.id));
         if (targets.length === 0) throw new AppError(409, "ALREADY_SUBMITTED", "Every selected destination is already queued, published or failed (use retry for failed publications)");
+        await q.query("SELECT 1 FROM workspaces WHERE id = $1 FOR UPDATE", [workspaceId]);   // serialize count-then-insert so parallel requests cannot all pass the plan limit
         await (deps.gate ?? noGate)(workspaceId, "posts_per_month", targets.length, q);   // one unit per destination
         const now = new Date();
         const sched = opts.schedule;

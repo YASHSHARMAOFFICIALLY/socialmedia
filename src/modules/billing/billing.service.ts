@@ -31,6 +31,16 @@ export function createBillingService(deps: { db: Db; workspaces: WorkspaceServic
   }
 
   async function used(workspaceId: string, feature: string, kind: Kind, q: Queryable): Promise<number> {
+    if (kind === "metered" && feature === "posts_per_month") {
+      // Published this period PLUS jobs already accepted (pending/scheduled-in-period/processing) that have not published yet:
+      // otherwise any number of posts could be scheduled before the first one runs.
+      const start = monthStart(), end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+      return (await q.query<{ n: number }>(
+        `SELECT (COALESCE((SELECT sum(quantity) FROM billing_usage_events WHERE workspace_id = $1 AND feature_key = $2 AND occurred_at >= $3), 0)
+               + (SELECT count(*) FROM publishing_jobs j WHERE j.workspace_id = $1 AND j.status IN ('pending','scheduled','processing') AND j.next_attempt_at < $4
+                    AND NOT EXISTS (SELECT 1 FROM billing_usage_events u WHERE u.workspace_id = j.workspace_id AND u.idempotency_key = 'published:' || j.id::text)))::int AS n`,
+        [workspaceId, feature, start, end])).rows[0]!.n;
+    }
     if (kind === "metered") {
       return (await q.query<{ n: number }>("SELECT COALESCE(sum(quantity), 0)::int AS n FROM billing_usage_events WHERE workspace_id = $1 AND feature_key = $2 AND occurred_at >= $3", [workspaceId, feature, monthStart()])).rows[0]!.n;
     }

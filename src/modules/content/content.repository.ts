@@ -32,7 +32,7 @@ export const contentRepository = {
   accountsByIds: async (q: Queryable, workspaceId: string, ids: string[]) =>
     (await q.query<{ id: string; platform: string; status: string }>("SELECT id, platform, status FROM social_accounts WHERE workspace_id = $1 AND id = ANY($2::uuid[])", [workspaceId, ids])).rows,
   mediaByIds: async (q: Queryable, workspaceId: string, ids: string[]) =>
-    (await q.query<{ id: string }>("SELECT id FROM media_assets WHERE workspace_id = $1 AND id = ANY($2::uuid[]) AND status <> 'deleted'", [workspaceId, ids])).rows,
+    (await q.query<{ id: string }>("SELECT id FROM media_assets WHERE workspace_id = $1 AND id = ANY($2::uuid[]) AND status = 'ready'", [workspaceId, ids])).rows,   // only verified (confirmed) assets can be attached
 
   upsertVariant: async (q: Queryable, v: { workspaceId: string; postId: string; accountId: string; platform: string; caption?: string | null | undefined; title?: string | null | undefined; description?: string | null | undefined; hashtags?: string[] | null | undefined; metadata?: Record<string, unknown> | undefined }) =>
     (await q.query<{ id: string }>(

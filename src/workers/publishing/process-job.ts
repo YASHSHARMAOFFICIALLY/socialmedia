@@ -77,23 +77,36 @@ export async function processPublishJob(deps: EngineDeps, jobId: string): Promis
   });
   if (!job) return "skipped"; // duplicate message, not due yet, cancelled, or already handled
 
+  let result: PublishResult;
   try {
     const { adapter, input } = await buildPublishInput(deps, job);
-    const result: PublishResult = await withTimeout((signal) => adapter.publish!({ ...input, signal }), deps.timeoutMs ?? TIMEOUT_MS);
-    const ok = await db.tx(async (q) => {
-      const n = await repo.markPublished(q, job, result);
-      if (!n) return false;
-      // Metering counts only what really published, once per job (the key makes retries and lease races harmless).
-      await q.query("INSERT INTO billing_usage_events (workspace_id, feature_key, quantity, idempotency_key) VALUES ($1,'posts_per_month',1,$2) ON CONFLICT (workspace_id, idempotency_key) DO NOTHING", [job.workspace_id, `published:${job.id}`]);
-      await repo.finishAttempt(q, job, "success", { response: result.warnings?.length ? { raw: result.raw, warnings: result.warnings } : result.raw });
-      await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "published", reason: `external id ${result.externalId}` });
-      return true;
-    });
-    if (!ok) { log.error({ jobId, externalId: result.externalId }, "published but lease was lost; reconciliation will confirm"); return "lease_lost"; }
-    return "published";
+    result = await withTimeout((signal) => adapter.publish!({ ...input, signal }), deps.timeoutMs ?? TIMEOUT_MS);
   } catch (err) {
     return handleFailure(deps, job, err);
   }
+
+  // The post is LIVE from here. A bookkeeping error must never reach handleFailure (it would mark the job failed and a manual retry would duplicate the post).
+  const persist = () => db.tx(async (q) => {
+    const n = await repo.markPublished(q, job, result);
+    if (!n) return false;
+    await repo.recordPublishedUsage(q, job);
+    await repo.finishAttempt(q, job, "success", { response: result.warnings?.length ? { raw: result.raw, warnings: result.warnings } : result.raw });
+    await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "published", reason: `external id ${result.externalId}` });
+    return true;
+  });
+  let ok: boolean;
+  try {
+    try { ok = await persist(); } catch { ok = await persist(); } // persist is idempotent (fenced by lease, usage keyed), so one immediate retry is safe
+  } catch (err) {
+    log.error({ jobId, externalId: result.externalId, err: err instanceof Error ? err.message : String(err) }, "published but could not record it; handing to reconciliation");
+    // Best effort; if even this fails the lease expires and the sweeper reconciles the job.
+    await db.tx(async (q) => {
+      if (await repo.markUnknown(q, job, "published on the platform but recording failed")) await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "processing", reason: `published (external id ${result.externalId}) but recording failed; awaiting reconciliation` });
+    }).catch(() => {});
+    return "reconciling";
+  }
+  if (!ok) { log.error({ jobId, externalId: result.externalId }, "published but lease was lost; reconciliation will confirm"); return "lease_lost"; }
+  return "published";
 }
 
 async function handleFailure(deps: EngineDeps, job: JobRow, err: unknown): Promise<ProcessResult> {

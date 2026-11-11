@@ -29,8 +29,16 @@ function checkRange(r: Range) {
   if ((new Date(r.to).getTime() - new Date(r.from).getTime()) / 86_400_000 > 366) throw badRequest("Range is limited to 366 days");
 }
 
-export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceService; registry: AdapterRegistry; cache: CacheStore }) {
+export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceService; registry: AdapterRegistry; cache: CacheStore; /** plan's analytics_history_days (null = unlimited); omitted when billing is not enforced */ historyDays?: (workspaceId: string) => Promise<number | null> }) {
   const { db, workspaces, registry, cache } = deps;
+
+  /** The plan decides how far back a workspace may look. */
+  async function history(workspaceId: string, r: Range) {
+    const days = await deps.historyDays?.(workspaceId);
+    if (days == null) return;
+    const oldest = day(new Date(Date.now() - days * 86_400_000));
+    if (r.from < oldest) throw new AppError(402, "PLAN_LIMIT_REACHED", `Your plan covers the last ${days} days of analytics`, { feature: "analytics_history_days", limit: days, oldestAllowed: oldest });
+  }
 
   /** Cache keys carry the workspace's data version, so a new collection invalidates everything without a purge. */
   async function cached<T extends object>(workspaceId: string, name: string, params: unknown, compute: () => Promise<T>): Promise<T & { cached?: boolean }> {
@@ -133,13 +141,13 @@ export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceServ
     /** Cross-platform dashboard. */
     async overview(a: Actor, workspaceId: string, q: Partial<Range> & { platform?: string | undefined }) {
       await workspaces.authorize(a.id, workspaceId, "analytics:read");
-      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r);
+      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r); await history(workspaceId, r);
       return cached(workspaceId, "overview", { r, p: q.platform }, () => overviewData(workspaceId, r, q.platform));
     },
 
     async platform(a: Actor, workspaceId: string, platform: string, q: Partial<Range> & { grain?: Grain | undefined }) {
       await workspaces.authorize(a.id, workspaceId, "analytics:read");
-      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r);
+      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r); await history(workspaceId, r);
       return cached(workspaceId, "platform", { r, platform, g: q.grain }, async () => {
         const o = await overviewData(workspaceId, r, platform);
         const p = o.platforms[0];
@@ -154,7 +162,7 @@ export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceServ
       await workspaces.authorize(a.id, workspaceId, "analytics:read");
       const acct = (await repo.accounts(db, workspaceId)).rows.find((x) => x.id === accountId);
       if (!acct) throw notFound("Account");
-      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r);
+      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r); await history(workspaceId, r);
       const grain = q.grain ?? "day";
       return cached(workspaceId, "account", { r, accountId, grain }, async () => {
         const [o, followers] = await Promise.all([overviewData(workspaceId, r, acct.platform, accountId), followerGrowth(workspaceId, grain, r, acct.platform, accountId)]);
@@ -193,7 +201,7 @@ export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceServ
 
     async trends(a: Actor, workspaceId: string, q: Partial<Range> & { metric: string; grain?: Grain | undefined; platform?: string | undefined; accountId?: string | undefined }) {
       await workspaces.authorize(a.id, workspaceId, "analytics:read");
-      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r);
+      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r); await history(workspaceId, r);
       const grain = q.grain ?? "day";
       const def = (await repo.definitions(db)).rows.find((d) => d.key === q.metric);
       if (!def) throw badRequest(`Unknown metric '${q.metric}'`);
@@ -205,7 +213,7 @@ export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceServ
 
     async comparePlatforms(a: Actor, workspaceId: string, q: Partial<Range>) {
       await workspaces.authorize(a.id, workspaceId, "analytics:read");
-      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r);
+      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r); await history(workspaceId, r);
       return cached(workspaceId, "compare-platforms", { r }, async () => {
         const [o, defs] = await Promise.all([overviewData(workspaceId, r), repo.definitions(db)]);
         const keys = [...new Set(o.platforms.flatMap((p) => Object.keys(p.metrics)))];
@@ -222,7 +230,7 @@ export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceServ
     /** Two date ranges side by side; change is null when either side has no data (never 0 by default). */
     async compareRanges(a: Actor, workspaceId: string, q: { aFrom: string; aTo: string; bFrom: string; bTo: string; platform?: string | undefined }) {
       await workspaces.authorize(a.id, workspaceId, "analytics:read");
-      const A = { from: q.aFrom, to: q.aTo }, B = { from: q.bFrom, to: q.bTo }; checkRange(A); checkRange(B);
+      const A = { from: q.aFrom, to: q.aTo }, B = { from: q.bFrom, to: q.bTo }; checkRange(A); checkRange(B); await history(workspaceId, A); await history(workspaceId, B);
       return cached(workspaceId, "compare-ranges", q, async () => {
         const [oa, ob] = await Promise.all([overviewData(workspaceId, A, q.platform), overviewData(workspaceId, B, q.platform)]);
         const platforms = [...new Set([...oa.platforms, ...ob.platforms].map((p) => p.platform))].sort();
@@ -239,7 +247,7 @@ export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceServ
 
     async topPosts(a: Actor, workspaceId: string, q: Partial<Range> & { metric: string; platform?: string | undefined; accountId?: string | undefined; limit: number }) {
       await workspaces.authorize(a.id, workspaceId, "analytics:read");
-      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r);
+      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r); await history(workspaceId, r);
       return cached(workspaceId, "top", { r, ...q }, async () => ({ range: r, metric: q.metric, platform: q.platform ?? null, posts: await topPosts(workspaceId, q.metric, r, q.platform, q.accountId, q.limit) }));
     },
   };

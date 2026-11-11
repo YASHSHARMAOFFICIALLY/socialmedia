@@ -185,6 +185,21 @@ describe("publishing engine", async () => {
       expect(ev.some((r: string) => /reconciled/.test(r))).toBe(true);
     });
 
+    it("a DB error AFTER the platform accepted the post is reconciled, never marked failed (a manual retry would duplicate it)", async () => {
+      const li = createFakeAdapter("linkedin", () => ok("live-1"), { reconcile: async () => ({ externalId: "live-1" }) });
+      const t = await mk([li]);
+      const { owner, ws, post } = await world(t);
+      await publish(owner, ws, post);
+      await t.db.query("CREATE FUNCTION boom() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'connection terminated'; END $$ LANGUAGE plpgsql");
+      await t.db.query("CREATE TRIGGER boom BEFORE INSERT ON billing_usage_events FOR EACH ROW EXECUTE FUNCTION boom()");
+      expect(await drain(t)).toEqual(["reconciling"]);
+      expect((await jobs(t, ws))[0]).toMatchObject({ status: "processing", needs_reconciliation: true });
+      await t.db.query("DROP TRIGGER boom ON billing_usage_events");
+      expect((await t.deps.engine.sweep()).reconciled).toBe(1);
+      expect((await jobs(t, ws))[0]).toMatchObject({ status: "published", external_id: "live-1" });
+      expect(li.calls).toHaveLength(1);
+    });
+
     it("keeps looking until the window passes, then fails as 'unconfirmed' (no auto-retry); manual retry warns about a possible duplicate", async () => {
       const li = createFakeAdapter("linkedin", () => { throw new PlatformError("unknown", "socket hang up"); }, { reconcile: async () => null });
       const t = await mk([li]);

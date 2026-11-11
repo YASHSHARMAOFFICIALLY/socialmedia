@@ -39,6 +39,7 @@ async function reconcileOne(deps: EngineDeps, found: JobRow & { unknown_age_s: n
     if (hit) {
       await db.tx(async (q) => {
         if (await repo.markPublished(q, job, hit)) {
+          await repo.recordPublishedUsage(q, job);
           await repo.finishAttempt(q, job, "success", { response: hit.raw, message: "confirmed by reconciliation" });
           await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "published", reason: `reconciled: found external id ${hit.externalId}` });
         }

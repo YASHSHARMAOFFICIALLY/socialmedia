@@ -44,6 +44,40 @@ describe("plan limits on REST (BILLING_ENFORCE=true)", async () => {
   });
 });
 
+describe("posts_per_month counts accepted-but-unpublished jobs", async () => {
+  const t = await createTestApp([createFakeAdapter("linkedin", () => ok()).adapter], { env: { BILLING_ENFORCE: "true" } });
+  afterAll(t.close);
+  it("queued/scheduled posts consume the limit before anything has published", async () => {
+    const { owner, ws, post } = await world(t, ["linkedin"]);
+    expect((await publish(owner, ws, post)).status).toBe(202);                           // queued, not published: counts as 1
+    await t.deps.billing.recordUsage(ws, "posts_per_month", 29, "bulk");                // 29 published + 1 queued = 30 = Free limit
+    const acc = (await t.db.query<{ id: string }>("SELECT id FROM social_accounts WHERE workspace_id = $1", [ws])).rows[0]!.id;
+    const second = (await owner.agent.post(`/workspaces/${ws}/posts`).send({ body: "two", variants: [{ accountId: acc }] })).body.data.id;
+    const res = await publish(owner, ws, second);
+    expect(res.status).toBe(402);
+    expect(res.body.error.details).toMatchObject({ feature: "posts_per_month", used: 30 });
+    await drain(t);                                                                      // the queued one publishes: still exactly 30, not 31
+    expect((await t.deps.billing.check(ws, "posts_per_month")).used).toBe(30);
+  });
+});
+
+describe("analytics_history_days", async () => {
+  const t = await createTestApp([createFakeAdapter("linkedin", () => ok()).adapter], { env: { BILLING_ENFORCE: "true" } });
+  afterAll(t.close);
+  const ago = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
+  it("Free looks back 30 days, Starter 90; the default range always works", async () => {
+    const { owner, ws } = await world(t, ["linkedin"]);
+    const get = (from?: string) => owner.agent.get(`/workspaces/${ws}/analytics/overview${from ? `?from=${from}` : ""}`);
+    expect((await get()).status).toBe(200);
+    const r = await get(ago(100));
+    expect(r.status).toBe(402);
+    expect(r.body.error.details).toMatchObject({ feature: "analytics_history_days", limit: 30 });
+    await upgrade(t, ws, "starter");
+    expect((await get(ago(80))).status).toBe(200);
+    expect((await get(ago(100))).status).toBe(402);
+  });
+});
+
 describe("billing not enforced (default)", async () => {
   const t = await createTestApp([createFakeAdapter("linkedin", () => ok()).adapter]);
   afterAll(t.close);

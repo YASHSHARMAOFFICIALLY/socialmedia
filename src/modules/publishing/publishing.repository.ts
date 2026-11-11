@@ -75,6 +75,9 @@ export const publishingRepository = {
     (await q.query(
       `UPDATE publishing_jobs SET status = 'published', external_id = $3, external_url = $4, published_at = now(), lease_token = NULL, lease_until = NULL, needs_reconciliation = false, failure_kind = NULL, failure_message = NULL
         WHERE id = $1 AND lease_token = $2 AND status = 'processing'`, [j.id, j.lease_token, r.externalId, r.url ?? null])).rowCount,
+  /** Metering: one unit per job that really published. Keyed, so lease races, retries and reconciliation record it once. */
+  recordPublishedUsage: (q: Queryable, j: { id: string; workspace_id: string }) =>
+    q.query("INSERT INTO billing_usage_events (workspace_id, feature_key, quantity, idempotency_key) VALUES ($1,'posts_per_month',1,$2) ON CONFLICT (workspace_id, idempotency_key) DO NOTHING", [j.workspace_id, `published:${j.id}`]),
   markRetry: async (q: Queryable, j: JobRow, delayS: number, kind: string, message: string) =>
     (await q.query<{ next_attempt_at: string }>(
       `UPDATE publishing_jobs SET status = 'pending', next_attempt_at = now() + make_interval(secs => $3), lease_token = NULL, lease_until = NULL, failure_kind = $4, failure_message = $5
