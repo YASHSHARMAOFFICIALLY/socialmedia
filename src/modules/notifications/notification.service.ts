@@ -9,11 +9,11 @@ import { can, type Permission, type Role } from "../workspaces/permissions.js";
 import type { Actor, WorkspaceService } from "../workspaces/workspace.service.js";
 import { notificationRepository as repo } from "./notification.repository.js";
 
-export const NOTIFICATION_TYPES = ["publish_succeeded", "publish_failed", "account_reauth_required", "account_expiring", "approval_requested", "approval_decided", "series_occurrence_failed"] as const;
+export const NOTIFICATION_TYPES = ["publish_succeeded", "publish_failed", "account_reauth_required", "account_expiring", "approval_requested", "approval_decided", "series_occurrence_failed", "billing_subscription_activated", "billing_payment_failed", "billing_subscription_canceled"] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 /** Email defaults: only things that need attention. Success pings stay in-app. */
-const EMAIL_DEFAULT: Record<NotificationType, boolean> = { publish_succeeded: false, publish_failed: true, account_reauth_required: true, account_expiring: true, approval_requested: true, approval_decided: true, series_occurrence_failed: true };
-const WEBHOOK_TYPE: Record<NotificationType, string> = { publish_succeeded: "publication.published", publish_failed: "publication.failed", account_reauth_required: "account.reauth_required", account_expiring: "account.expiring", approval_requested: "approval.requested", approval_decided: "approval.decided", series_occurrence_failed: "series.occurrence_failed" };
+const EMAIL_DEFAULT: Record<NotificationType, boolean> = { publish_succeeded: false, publish_failed: true, account_reauth_required: true, account_expiring: true, approval_requested: true, approval_decided: true, series_occurrence_failed: true, billing_subscription_activated: true, billing_payment_failed: true, billing_subscription_canceled: true };
+const WEBHOOK_TYPE: Record<NotificationType, string> = { publish_succeeded: "publication.published", publish_failed: "publication.failed", account_reauth_required: "account.reauth_required", account_expiring: "account.expiring", approval_requested: "approval.requested", approval_decided: "approval.decided", series_occurrence_failed: "series.occurrence_failed", billing_subscription_activated: "billing.subscription_activated", billing_payment_failed: "billing.payment_failed", billing_subscription_canceled: "billing.subscription_canceled" };
 const cursorSchema = z.object({ createdAt: z.string(), id: z.string() });
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 

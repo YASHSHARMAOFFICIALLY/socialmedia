@@ -1,4 +1,4 @@
-import type { Db } from "../../infrastructure/database/db.js";
+import type { Db, Queryable } from "../../infrastructure/database/db.js";
 import type { Logger } from "../../infrastructure/logger/logger.js";
 import { ProviderError, WebhookSignatureError, type PaymentProvider, type ProviderSubStatus } from "../../integrations/payments/types.js";
 import { AppError, badRequest } from "../../shared/errors/errors.js";
@@ -12,7 +12,7 @@ const providerErr = (e: unknown) => e instanceof ProviderError ? new AppError(e.
 
 interface LocalSub { id: string; workspace_id: string; status: SubStatus; plan_version_id: string; currency: string; interval: string; provider_subscription_id: string | null }
 
-export function createBillingPayments(deps: { db: Db; workspaces: WorkspaceService; provider: PaymentProvider | null; log: Logger; returnUrl: string }) {
+export function createBillingPayments(deps: { db: Db; workspaces: WorkspaceService; provider: PaymentProvider | null; log: Logger; returnUrl: string; /** tells the workspace's billing managers (in-app, email, webhooks) about a subscription change */ notify?: (q: Queryable, ws: string, type: "billing_subscription_activated" | "billing_payment_failed" | "billing_subscription_canceled", title: string, body: string, ref: string) => Promise<unknown> }) {
   const { db, workspaces, provider, log } = deps;
   const need = () => { if (!provider) throw new AppError(503, "PAYMENTS_NOT_CONFIGURED", "Payments are not configured"); return provider; };
 
@@ -45,6 +45,13 @@ export function createBillingPayments(deps: { db: Db; workspaces: WorkspaceServi
                 canceled_at = CASE WHEN $2 = 'canceled' THEN COALESCE(canceled_at, now()) ELSE canceled_at END WHERE id = $1`,
         [sub.id, next ?? sub.status, p.name, ps.id, ps.customerId, ps.currentPeriodEnd, ps.cancelAtPeriodEnd, bought.plan_version_id, bought.currency, bought.interval]);
       await auditRepository.record(q, { workspaceId: sub.workspace_id, actorId: null, action: "billing.subscription.synced", entityType: "subscription", entityId: sub.id, metadata: { from: sub.status, to: next ?? sub.status, provider: p.name, ...(planChanged ? { planChanged: true } : {}) } });
+      const to = next ?? sub.status;
+      if (to !== sub.status && deps.notify) {
+        const ref = `sub:${sub.id}:${to}:${ps.currentPeriodEnd ?? ""}`;
+        if (to === "active" && sub.status !== "past_due") await deps.notify(q, sub.workspace_id, "billing_subscription_activated", "Your subscription is active", "Thanks! Your plan is now active.", ref);
+        else if (to === "past_due") await deps.notify(q, sub.workspace_id, "billing_payment_failed", "Payment failed", "We could not charge your payment method. Update it in the billing portal to keep your plan.", ref);
+        else if (to === "canceled") await deps.notify(q, sub.workspace_id, "billing_subscription_canceled", "Your subscription ended", "Your workspace is back on the Free plan.", ref);
+      }
       return "processed";
     });
   }

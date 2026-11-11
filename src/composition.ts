@@ -115,6 +115,6 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
   const billing = createBillingService({ db, workspaces });
   const mcpAuth = createMcpAuth({ db, workspaces });
   const provider = o.payments !== undefined ? o.payments : cfg.DODO_API_KEY && cfg.DODO_WEBHOOK_KEY ? createDodoProvider({ apiKey: cfg.DODO_API_KEY, webhookKey: cfg.DODO_WEBHOOK_KEY, mode: cfg.DODO_MODE }) : null;
-  const billingPayments = createBillingPayments({ db, workspaces, provider, log, returnUrl: cfg.APP_URL ?? cfg.BETTER_AUTH_URL ?? "" });
+  const billingPayments = createBillingPayments({ db, workspaces, provider, log, returnUrl: cfg.APP_URL ?? cfg.BETTER_AUTH_URL ?? "", notify: async (q, ws, type, title, body, ref) => notifications.notify(q, { workspaceId: ws, userIds: await notifications.holders(q, ws, "billing:manage"), type, title, body, ref }) });
   return { cfg, log, db, auth: createAuth(db, cfg, mailer), workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns: createCampaignService({ db, workspaces, analytics }), approvals, notifications, reports, recurring, webhooks, competitors, ai, billing, billingPayments, mcpAuth, insights: createInsightsService({ db, workspaces, analytics }), storage, engine };
 }

@@ -136,6 +136,21 @@ describe("billing payments (Dodo adapter, mocked HTTP)", async () => {
     expect((await t.deps.billing.check(ws, "seats")).plan).toBe("starter");
   });
 
+  it("billing managers are notified of activation, failed payment and cancellation (once each)", async () => {
+    const { owner, ws } = await world(t, ["linkedin"]);
+    await setRef("pro", "pdt_pro");
+    const id = (await owner.agent.post(`/workspaces/${ws}/billing/checkout`).send({ plan: "pro", currency: "INR" })).body.data.subscriptionId as string;
+    dodo.st.subs["sub_N"] = { subscription_id: "sub_N", status: "active", product_id: "pdt_pro", currency: "INR", metadata: { billing_subscription_id: id } };
+    const types = async () => (await t.db.query<{ type: string }>("SELECT type FROM notifications WHERE workspace_id = $1 AND user_id = $2 AND type LIKE 'billing_%' ORDER BY created_at, id", [ws, owner.id])).rows.map((r) => r.type);
+    await hook("subscription.active", { subscription_id: "sub_N" });
+    await hook("subscription.active", { subscription_id: "sub_N" });                 // duplicate delivery: still one notification
+    dodo.st.subs["sub_N"]!["status"] = "past_due";
+    await hook("subscription.on_hold", { subscription_id: "sub_N" });
+    dodo.st.subs["sub_N"]!["status"] = "expired";
+    await hook("subscription.expired", { subscription_id: "sub_N" });
+    expect(await types()).toEqual(["billing_subscription_activated", "billing_payment_failed", "billing_subscription_canceled"]);
+  });
+
   it("daily safety-net re-sync: a cancellation whose webhook never arrived is applied by the sweep", async () => {
     const { owner, ws } = await world(t, ["linkedin"]);
     await setRef("pro", "pdt_pro");

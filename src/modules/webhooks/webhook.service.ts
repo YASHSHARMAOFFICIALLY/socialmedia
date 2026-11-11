@@ -9,7 +9,7 @@ import { auditRepository } from "../audit/audit.repository.js";
 import type { Actor, WorkspaceService } from "../workspaces/workspace.service.js";
 import { checkWebhookUrl } from "./webhook.url.js";
 
-export const WEBHOOK_EVENTS = ["publication.published", "publication.failed", "account.reauth_required", "account.expiring", "approval.requested", "approval.decided", "series.occurrence_failed", "ping"] as const;
+export const WEBHOOK_EVENTS = ["publication.published", "publication.failed", "account.reauth_required", "account.expiring", "approval.requested", "approval.decided", "series.occurrence_failed", "billing.subscription_activated", "billing.payment_failed", "billing.subscription_canceled", "ping"] as const;
 const BACKOFF_S = [60, 300, 1800, 7200, 21600, 43200, 86400];     // 1m, 5m, 30m, 2h, 6h, 12h, 24h => 8 attempts over ~2 days
 const AUTO_DISABLE_AFTER = 5;
 const cursorSchema = z.object({ createdAt: z.string(), id: z.string() });
