@@ -145,6 +145,14 @@ describe("Telegram", () => {
     expect(limited).toMatchObject({ kind: "rate_limited", opts: { retryAfterS: 7 } });
     expect((await errKind(tg(harness(() => Response.json({ ok: false }, { status: 401 })).f).publish!(input(content()))))?.kind).toBe("auth_expired");
   });
+  it("album: one sendMediaGroup call, caption on the first item only, first message id returned", async () => {
+    const h = harness(() => Response.json({ ok: true, result: [{ message_id: 7, chat: { username: "news" } }, { message_id: 8 }] }));
+    const r = await tg(h.f).publish!(input(content({ text: "cap" }), [mk("image"), mk("video")], {}, "-100"));
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0]).toMatchObject({ url: expect.stringContaining("sendMediaGroup"), body: { media: [{ type: "photo", caption: "cap" }, { type: "video" }] } });
+    expect((h.calls[0]!.body as { media: { caption?: string }[] }).media[1]!.caption).toBeUndefined();
+    expect(r).toMatchObject({ externalId: "7", url: "https://t.me/news/7" });
+  });
   it("a 5xx on the creating call is unknown (never a blind resend)", async () => {
     expect((await errKind(tg(harness(() => new Response("", { status: 502 })).f).publish!(input(content()))))?.kind).toBe("unknown");
   });
@@ -152,7 +160,8 @@ describe("Telegram", () => {
     const r = contentRules.telegram;
     expect(r.validate(content({ text: "a".repeat(4097) })).some((i) => i.code === "TEXT_LONG")).toBe(true);
     expect(r.validate(content({ text: "a".repeat(1025), media: [mediaOf("image")] })).some((i) => i.code === "TEXT_LONG")).toBe(true);
-    expect(r.validate(content({ media: [mediaOf("image"), mediaOf("image")] })).some((i) => i.code === "TOO_MANY_MEDIA")).toBe(true);
+    expect(r.validate(content({ media: Array.from({ length: 11 }, () => mediaOf("image")) })).some((i) => i.code === "TOO_MANY_MEDIA")).toBe(true);
+    expect(r.validate(content({ media: [mediaOf("image"), mediaOf("video")] })).some((i) => i.code === "TOO_MANY_MEDIA")).toBe(false);
     expect(r.validate(content({ media: [mediaOf("image", 6 * 1024 * 1024)] })).some((i) => i.code === "IMAGE_TOO_LARGE")).toBe(true);
     expect(tg(fetch).reconcile).toBeUndefined();
   });

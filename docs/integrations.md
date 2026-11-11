@@ -101,10 +101,10 @@ Verified (docs.joinmastodon.org): the user creates an app + access token on thei
 
 ### Telegram  (credentials: bot token + channel)
 Verified (core.telegram.org/bots/api): `sendMessage` (≤4096), `sendPhoto` / `sendVideo` by URL (caption ≤1024; photo ≤5 MB, other ≤20 MB by URL). The bot must be a channel administrator.
-- One media per post (albums not implemented); plain text (no parse_mode). No reconcile and no post analytics (Bot API has neither); only metric: member count.
+- 1 media, or an album of 2-10 photos/videos (sendMediaGroup, caption on the first item); plain text (no parse_mode). No reconcile and no post analytics (Bot API has neither); only metric: member count.
 
 ### Deliberately not built
-Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time series, Bluesky video, Pinterest video, Telegram albums.
+Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time series, Bluesky video, Pinterest video.
 
 ## Competitor intelligence (X, YouTube)
 Public data only, read through the official API with one of your own connected accounts. Instagram (needs Facebook Login) and LinkedIn do not offer this to these integrations → `422 CAPABILITY_UNSUPPORTED`. Competitor analytics are never mixed with your private analytics: comparisons use only publicly visible counts (likes, comments, reposts, quotes). Hidden counts are `null`, not 0.

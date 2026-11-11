@@ -4,7 +4,7 @@ import { withHashtags } from "../core/rules.js";
 import { NO_CAPABILITIES, NO_OAUTH, type SocialAdapter } from "../core/types.js";
 
 // Verified (core.telegram.org/bots/api): POST https://api.telegram.org/bot<token>/<method>; responses {ok, result | description, error_code,
-// parameters.retry_after}. Methods used: getMe, getChat, getChatMember, getChatMemberCount, sendMessage, sendPhoto, sendVideo.
+// parameters.retry_after}. Methods used: getMe, getChat, getChatMember, getChatMemberCount, sendMessage, sendPhoto, sendVideo, sendMediaGroup (2-10 items, photos and videos may mix, caption on the first item; result is an array of messages).
 // The bot token never expires; the bot must be an administrator of the channel. The Bot API has no channel history or per-message
 // view counts, so there is no reconcile and no post analytics; the only metric is the member count (getChatMemberCount).
 const api = (token: string, method: string) => `https://api.telegram.org/bot${token}/${method}`;
@@ -20,7 +20,7 @@ export function createTelegramAdapter(f: typeof fetch = fetch): SocialAdapter {
   }
   return {
     platform: "telegram",
-    capabilities: { ...NO_CAPABILITIES, textPost: true, imagePost: true, videoPost: true, accountAnalytics: true },
+    capabilities: { ...NO_CAPABILITIES, textPost: true, imagePost: true, videoPost: true, carousel: true, accountAnalytics: true },
     oauth: NO_OAUTH,
     async fetchAccount(): Promise<never> { throw new PlatformError("permanent", "telegram channels are connected with credentials"); },
     credentials: {
@@ -44,11 +44,15 @@ export function createTelegramAdapter(f: typeof fetch = fetch): SocialAdapter {
     },
     async publish({ accessToken, account, content, media, signal }) {
       const text = withHashtags(content);
-      const m = media.find((x) => x.role === "media");
+      const items = media.filter((x) => x.role === "media");
+      const m = items[0];
       const chat_id = account.externalId;
-      const sent = m
-        ? await call<{ message_id: number; chat?: { username?: string } }>(accessToken, m.kind === "image" ? "sendPhoto" : "sendVideo", { chat_id, [m.kind === "image" ? "photo" : "video"]: await m.url(), ...(text ? { caption: text } : {}) }, true, signal)
-        : await call<{ message_id: number; chat?: { username?: string } }>(accessToken, "sendMessage", { chat_id, text }, true, signal);
+      type Sent = { message_id: number; chat?: { username?: string } };
+      const sent = items.length > 1
+        ? (await call<Sent[]>(accessToken, "sendMediaGroup", { chat_id, media: await Promise.all(items.map(async (x, i) => ({ type: x.kind === "image" ? "photo" : "video", media: await x.url(), ...(i === 0 && text ? { caption: text } : {}) }))) }, true, signal))[0]!
+        : m
+          ? await call<Sent>(accessToken, m.kind === "image" ? "sendPhoto" : "sendVideo", { chat_id, [m.kind === "image" ? "photo" : "video"]: await m.url(), ...(text ? { caption: text } : {}) }, true, signal)
+          : await call<Sent>(accessToken, "sendMessage", { chat_id, text }, true, signal);
       const user = sent.chat?.username;
       return { externalId: String(sent.message_id), ...(user ? { url: `https://t.me/${user}/${sent.message_id}` } : {}), raw: sent };
     },

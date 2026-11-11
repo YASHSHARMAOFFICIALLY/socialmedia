@@ -2,7 +2,7 @@ import { chars, mediaOnly, withHashtags, type ContentRules, type Issue } from ".
 
 // Verified (core.telegram.org/bots/api): sendMessage text 1-4096 characters; sendPhoto/sendVideo caption 0-1024 characters.
 // When Telegram downloads a file from an HTTP URL (how this integration sends media): photos <= 5 MB, other content <= 20 MB.
-// One media item per post (albums via sendMediaGroup are not implemented). Text is sent as plain text (no parse_mode).
+// Albums (sendMediaGroup) hold 2-10 items; the caption goes on the first item. Text is sent as plain text (no parse_mode).
 export const telegramRules: ContentRules = {
   platform: "telegram",
   validate(c) {
@@ -10,7 +10,7 @@ export const telegramRules: ContentRules = {
     const text = withHashtags(c);
     const media = mediaOnly(c);
     if (!text && media.length === 0) issues.push({ code: "EMPTY", field: "caption", severity: "error", message: "Post needs text or media" });
-    if (media.length > 1) issues.push({ code: "TOO_MANY_MEDIA", field: "media", severity: "error", message: "Telegram posts carry one photo or video here (albums are not implemented)" });
+    if (media.length > 10) issues.push({ code: "TOO_MANY_MEDIA", field: "media", severity: "error", message: "A Telegram album holds at most 10 items" });
     const limit = media.length ? 1024 : 4096;
     if (chars(text) > limit) issues.push({ code: "TEXT_LONG", field: "caption", severity: "error", message: `Text is ${chars(text)} characters; Telegram allows ${limit}${media.length ? " in a media caption" : ""}` });
     for (const m of media) {
