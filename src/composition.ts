@@ -48,13 +48,14 @@ import { dispatchOutbox, runPublishingSweep } from "./workers/publishing/sweeper
 import { type Gate } from "./modules/billing/gate.js";
 import { createDodoProvider } from "./integrations/payments/dodo.adapter.js";
 import type { PaymentProvider } from "./integrations/payments/types.js";
+import { cloudflareVideoTransformer, type VideoTransformer } from "./infrastructure/storage/video-transform.js";
 import { createBillingPayments } from "./modules/billing/billing.payments.js";
 import { createMcpAuth } from "./modules/mcp/mcp.auth.js";
 import { createBillingService } from "./modules/billing/billing.service.js";
 import { createAccountService } from "./modules/accounts/account.service.js";
 
 /** Composition root: the only place concrete implementations are wired together. */
-export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: Mailer; adapters?: SocialAdapter[]; queue: JobQueue; analyticsQueue: JobQueue<AnalyticsMessage>; cache?: CacheStore; engine?: Partial<EngineDeps>; storage?: ObjectStorage | null; webhookFetch?: typeof fetch; aiProvider?: AiProvider | null; images?: ImageTransformer | null; payments?: PaymentProvider | null }): Promise<Deps> {
+export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: Mailer; adapters?: SocialAdapter[]; queue: JobQueue; analyticsQueue: JobQueue<AnalyticsMessage>; cache?: CacheStore; engine?: Partial<EngineDeps>; storage?: ObjectStorage | null; webhookFetch?: typeof fetch; aiProvider?: AiProvider | null; images?: ImageTransformer | null; videos?: VideoTransformer | null; payments?: PaymentProvider | null }): Promise<Deps> {
   const mailer = o.mailer ?? createMailer({ apiKey: cfg.RESEND_API_KEY }, log);
   const adapters = o.adapters ?? [
     ...(cfg.LINKEDIN_CLIENT_ID && cfg.LINKEDIN_CLIENT_SECRET ? [createLinkedInAdapter({ clientId: cfg.LINKEDIN_CLIENT_ID, clientSecret: cfg.LINKEDIN_CLIENT_SECRET })] : []),
@@ -81,7 +82,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
   const storage = o.storage !== undefined ? o.storage
     : cfg.R2_ACCOUNT_ID && cfg.R2_ACCESS_KEY_ID && cfg.R2_SECRET_ACCESS_KEY && cfg.R2_BUCKET
       ? createR2Storage({ accountId: cfg.R2_ACCOUNT_ID, accessKeyId: cfg.R2_ACCESS_KEY_ID, secretAccessKey: cfg.R2_SECRET_ACCESS_KEY, bucket: cfg.R2_BUCKET }) : null;
-  const media = createMediaService({ db, workspaces, storage, rules: contentRules, images: o.images !== undefined ? o.images : typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair !== "undefined" ? cloudflareImageTransformer() : null });
+  const media = createMediaService({ db, workspaces, storage, rules: contentRules, videos: o.videos !== undefined ? o.videos : cfg.MEDIA_TRANSFORM_ORIGIN ? cloudflareVideoTransformer(cfg.MEDIA_TRANSFORM_ORIGIN) : null, images: o.images !== undefined ? o.images : typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair !== "undefined" ? cloudflareImageTransformer() : null });
   // Platforms (Instagram in particular) download media from a URL: hand them a time-limited signed GET URL.
   const engineDeps: EngineDeps = { db, log, registry, accounts, content, ...(storage ? { mediaUrl: (key: string) => storage.presignGet(key, 3600) } : {}), ...o.engine };
   const notifications = createNotificationService({ db, workspaces, mailer, log, appUrl: cfg.APP_URL, webhooks: webhooks.emitter, producerLagS: cfg.NOTIFY_PRODUCER_LAG_S });

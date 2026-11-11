@@ -11,6 +11,7 @@ import type { Actor, WorkspaceService } from "../workspaces/workspace.service.js
 import { mediaRepository as repo, type MediaRow } from "./media.repository.js";
 import type { ImageTransformer } from "../../infrastructure/storage/image-transform.js";
 import { readMp4Meta } from "./media.mp4.js";
+import { MEDIA_TRANSFORM_MAX_INPUT_BYTES, MEDIA_TRANSFORM_MAX_OUTPUT_S, type VideoTransformer, type VideoTransformOptions } from "../../infrastructure/storage/video-transform.js";
 import { imageDimensions, sniffMime } from "./media.sniff.js";
 import { MIME_KIND } from "./media.schemas.js";
 
@@ -19,7 +20,7 @@ const UPLOAD_TTL_S = 3600, DOWNLOAD_TTL_S = 3600, SNIFF_BYTES = 256 * 1024;
 const ext = (name: string) => /\.[A-Za-z0-9]{1,8}$/.exec(name)?.[0].toLowerCase() ?? "";
 const publicView = ({ storage_key: _k, workspace_id: _w, ...m }: MediaRow) => m;
 
-export function createMediaService(deps: { db: Db; workspaces: WorkspaceService; storage: ObjectStorage | null; rules: Record<Platform, ContentRules>; images?: ImageTransformer | null }) {
+export function createMediaService(deps: { db: Db; workspaces: WorkspaceService; storage: ObjectStorage | null; rules: Record<Platform, ContentRules>; images?: ImageTransformer | null; videos?: VideoTransformer | null }) {
   const { db, workspaces } = deps;
   const storage = () => { if (!deps.storage) throw new AppError(503, "MEDIA_STORAGE_NOT_CONFIGURED", "Object storage is not configured"); return deps.storage; };
 
@@ -85,6 +86,8 @@ export function createMediaService(deps: { db: Db; workspaces: WorkspaceService;
       return Object.fromEntries((Object.keys(deps.rules) as Platform[]).map((p) => {
         const issues = deps.rules[p].validate({ text: "", title: "x", description: null, hashtags: [], media: [media], metadata: {} }).filter((i) => i.field === "media");
         const fixes = m.kind === "image" && issues.some((i) => i.code === "IMAGE_FORMAT") ? [{ action: "create_derivative", format: "jpeg", via: `POST /workspaces/${workspaceId}/media/${mediaId}/derivatives` }] : [];
+        const tooBig = m.kind === "video" && issues.some((i) => i.severity === "error" && /VIDEO_(TOO_LARGE|SIZE)/.test(i.code));
+        if (tooBig && !fixes.length) fixes.push({ action: "create_video_derivative", format: "mp4", via: `POST /workspaces/${workspaceId}/media/${mediaId}/video-derivatives` } as never);
         return [p, { compatible: !issues.some((i) => i.severity === "error"), issues, ...(fixes.length ? { fixes } : {}) }];
       }));
     },
@@ -111,6 +114,39 @@ export function createMediaService(deps: { db: Db; workspaces: WorkspaceService;
       const dims = imageDimensions(out.bytes, mime);
       const row = await repo.create(db, { id, workspaceId, kind: "image", key, filename: src.filename.replace(/\.[^.]+$/, "") + `.${o.format === "jpeg" ? "jpg" : o.format}`, mime, size: out.bytes.length, userId: a.id, derivedFrom: mediaId, derivation: { ...o }, status: "ready", width: dims?.width ?? null, height: dims?.height ?? null });
       await auditRepository.record(db, { workspaceId, actorId: a.id, action: "media.derived", entityType: "media", entityId: id, metadata: { from: mediaId, format: o.format }, ...(a.requestId ? { requestId: a.requestId } : {}) });
+      return publicView(row);
+    },
+
+    /**
+     * Creates a re-encoded (H.264/AAC MP4), downscaled copy of a video as a new asset; the original is untouched. Needs Cloudflare Media
+     * Transformations: input under 100 MB and 10 minutes, output at most 60 seconds (so longer videos can only be cut, never fully converted).
+     * The result is verified like an upload (real container from magic bytes, dimensions/duration read from the file) before it becomes usable.
+     */
+    async createVideoDerivative(a: Actor, workspaceId: string, mediaId: string, o: { maxWidth?: number | undefined; maxHeight?: number | undefined; fit: VideoTransformOptions["fit"]; startSeconds?: number | undefined; maxSeconds?: number | undefined; audio: boolean }) {
+      await workspaces.authorize(a.id, workspaceId, "media:write");
+      const st = storage();
+      const src = await repo.get(db, workspaceId, mediaId);
+      if (!src) throw notFound("Media");
+      if (src.kind !== "video" || src.status !== "ready") throw new AppError(409, "MEDIA_NOT_CONVERTIBLE", "Only confirmed videos can be converted");
+      if (!deps.videos) throw new AppError(503, "VIDEO_TRANSFORM_UNAVAILABLE", "Video transformation is not available in this deployment (it needs Cloudflare Media Transformations on a zone, MEDIA_TRANSFORM_ORIGIN)");
+      if (Number(src.size_bytes) > MEDIA_TRANSFORM_MAX_INPUT_BYTES) throw new AppError(422, "VIDEO_TOO_LARGE_TO_CONVERT", "Videos over 100 MB cannot be converted by the transformation service");
+      const knownS = src.duration_ms != null ? src.duration_ms / 1000 : null;
+      if (knownS !== null && knownS > 600) throw new AppError(422, "VIDEO_TOO_LONG_TO_CONVERT", "Videos over 10 minutes cannot be converted by the transformation service");
+      const cut = (o.startSeconds ?? 0) > 0 || o.maxSeconds !== undefined;
+      // One request yields at most 60 s. Converting a longer video without saying how much to keep would silently cut it: refuse instead.
+      if (!cut && (knownS === null || knownS > MEDIA_TRANSFORM_MAX_OUTPUT_S)) throw new AppError(422, "VIDEO_CUT_REQUIRED", `The transformation service outputs at most ${MEDIA_TRANSFORM_MAX_OUTPUT_S} seconds. Pass maxSeconds (and optionally startSeconds) to keep a part of this video`);
+      let out: { bytes: Uint8Array; contentType: string };
+      try { out = await deps.videos.transform(await st.presignGet(src.storage_key, 900), { width: o.maxWidth, height: o.maxHeight, fit: o.fit, durationS: o.maxSeconds ?? (knownS !== null ? Math.max(1, Math.ceil(knownS)) : undefined), startS: o.startSeconds, audio: o.audio }); }
+      catch { throw new AppError(502, "VIDEO_TRANSFORM_FAILED", "The video could not be transformed"); }
+      const real = sniffMime(out.bytes);
+      if (real !== "video/mp4") throw new AppError(502, "VIDEO_TRANSFORM_FAILED", "The transformation returned an unexpected file type");
+      if (out.bytes.length > MEDIA_TRANSFORM_MAX_INPUT_BYTES) throw new AppError(502, "VIDEO_TRANSFORM_FAILED", "The converted video is too large");
+      const meta = await readMp4Meta(async (from, to) => out.bytes.slice(from, to + 1), out.bytes.length).catch(() => null);
+      if (!meta || !meta.width || !meta.height) throw new AppError(502, "VIDEO_TRANSFORM_FAILED", "The converted video could not be read back");
+      const id = randomUUID(), key = `${workspaceId}/${id}.mp4`;
+      await st.put(key, out.bytes, "video/mp4");
+      const row = await repo.create(db, { id, workspaceId, kind: "video", key, filename: src.filename.replace(/\.[^.]+$/, "") + ".mp4", mime: "video/mp4", size: out.bytes.length, userId: a.id, derivedFrom: mediaId, derivation: { ...o }, status: "ready", width: meta.width, height: meta.height, durationMs: meta.durationMs ?? null });
+      await auditRepository.record(db, { workspaceId, actorId: a.id, action: "media.derived", entityType: "media", entityId: id, metadata: { from: mediaId, kind: "video", cut }, ...(a.requestId ? { requestId: a.requestId } : {}) });
       return publicView(row);
     },
 

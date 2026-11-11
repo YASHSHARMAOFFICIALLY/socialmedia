@@ -26,6 +26,14 @@ export const listQuery = z.object({
   unused: z.enum(["true", "false"]).optional(),
 });
 
+export const videoDerivativeBody = z.object({
+  maxWidth: z.number().int().min(10).max(2000).optional(),
+  maxHeight: z.number().int().min(10).max(2000).optional(),
+  fit: z.enum(["scale-down", "contain", "cover"]).default("scale-down"),
+  startSeconds: z.number().min(0).max(600).optional().describe("Start offset; makes this a CUT of the video"),
+  maxSeconds: z.number().min(1).max(60).optional().describe("Keep at most this many seconds; makes this a CUT of the video"),
+  audio: z.boolean().default(true),
+}).refine((b) => b.maxWidth !== undefined || b.maxHeight !== undefined, "Give maxWidth and/or maxHeight (a video is re-encoded to a size that fits)");
 export const derivativeBody = z.object({
   format: z.enum(["jpeg", "png", "webp"]),
   maxWidth: z.number().int().min(16).max(8192).optional(),

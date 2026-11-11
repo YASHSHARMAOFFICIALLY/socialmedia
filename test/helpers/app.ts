@@ -19,7 +19,7 @@ export function createMemoryQueue() {
   return { sent, queue: { sendBatch: async (m: { jobId: string }[]) => void sent.push(...m.map((x) => x.jobId)) } };
 }
 
-export async function createTestApp(adapters: SocialAdapter[] = [], o: { engine?: Parameters<typeof buildDeps>[3]["engine"]; queueFails?: () => boolean; storage?: ObjectStorage | null; mailer?: Mailer; wrapDb?: (db: Db) => Db; webhookFetch?: typeof fetch; images?: import("../../src/infrastructure/storage/image-transform.js").ImageTransformer | null; aiProvider?: import("../../src/infrastructure/ai/provider.js").AiProvider | null; env?: Record<string, string>; payments?: import("../../src/integrations/payments/types.js").PaymentProvider | null } = {}) {
+export async function createTestApp(adapters: SocialAdapter[] = [], o: { engine?: Parameters<typeof buildDeps>[3]["engine"]; queueFails?: () => boolean; storage?: ObjectStorage | null; mailer?: Mailer; wrapDb?: (db: Db) => Db; webhookFetch?: typeof fetch; images?: import("../../src/infrastructure/storage/image-transform.js").ImageTransformer | null; videos?: import("../../src/infrastructure/storage/video-transform.js").VideoTransformer | null; aiProvider?: import("../../src/infrastructure/ai/provider.js").AiProvider | null; env?: Record<string, string>; payments?: import("../../src/integrations/payments/types.js").PaymentProvider | null } = {}) {
   const created = await createTestDb();
   const db = o.wrapDb ? o.wrapDb(created.db) : created.db;
   const close = created.close;
@@ -32,7 +32,7 @@ export async function createTestApp(adapters: SocialAdapter[] = [], o: { engine?
   const queue = { sendBatch: async (m: { jobId: string }[]) => { if (o.queueFails?.()) throw new Error("queue down"); await mq.queue.sendBatch(m); } };
   const aq: string[] = [];
   const analyticsQueue = { sendBatch: async (m: { targetId: string }[]) => void aq.push(...m.map((x) => x.targetId)) };
-  const deps = await buildDeps(cfg, log, db, { mailer, adapters, queue, analyticsQueue, ...(o.engine ? { engine: o.engine } : {}), ...(o.storage !== undefined ? { storage: o.storage } : {}), ...(o.webhookFetch ? { webhookFetch: o.webhookFetch } : {}), ...(o.aiProvider !== undefined ? { aiProvider: o.aiProvider } : {}), ...(o.images !== undefined ? { images: o.images } : {}), ...(o.payments !== undefined ? { payments: o.payments } : {}) });
+  const deps = await buildDeps(cfg, log, db, { mailer, adapters, queue, analyticsQueue, ...(o.engine ? { engine: o.engine } : {}), ...(o.storage !== undefined ? { storage: o.storage } : {}), ...(o.webhookFetch ? { webhookFetch: o.webhookFetch } : {}), ...(o.aiProvider !== undefined ? { aiProvider: o.aiProvider } : {}), ...(o.images !== undefined ? { images: o.images } : {}), ...(o.videos !== undefined ? { videos: o.videos } : {}), ...(o.payments !== undefined ? { payments: o.payments } : {}) });
   const app = createApp(deps);
   let n = 0;
   /** Registers a fresh user and returns a cookie-carrying agent. */

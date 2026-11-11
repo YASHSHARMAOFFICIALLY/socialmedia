@@ -8,9 +8,9 @@ const COLS = "id, workspace_id, kind, storage_key, filename, mime_type, size_byt
 const PUBLIC = "id, kind, filename, mime_type, size_bytes::text, width, height, duration_ms, status, created_at";
 
 export const mediaRepository = {
-  create: async (q: Queryable, m: { id: string; workspaceId: string; kind: string; key: string; filename: string; mime: string; size: number; userId: string; derivedFrom?: string; derivation?: object; status?: string; width?: number | null; height?: number | null }) =>
-    (await q.query<MediaRow>(`INSERT INTO media_assets (id, workspace_id, kind, storage_key, filename, mime_type, size_bytes, created_by, derived_from, derivation, status, width, height) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11,'pending_upload'),$12,$13) RETURNING ${COLS}`,
-      [m.id, m.workspaceId, m.kind, m.key, m.filename, m.mime, m.size, m.userId, m.derivedFrom ?? null, m.derivation ? JSON.stringify(m.derivation) : null, m.status ?? null, m.width ?? null, m.height ?? null])).rows[0]!,
+  create: async (q: Queryable, m: { id: string; workspaceId: string; kind: string; key: string; filename: string; mime: string; size: number; userId: string; derivedFrom?: string; derivation?: object; status?: string; width?: number | null; height?: number | null; durationMs?: number | null }) =>
+    (await q.query<MediaRow>(`INSERT INTO media_assets (id, workspace_id, kind, storage_key, filename, mime_type, size_bytes, created_by, derived_from, derivation, status, width, height, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11,'pending_upload'),$12,$13,$14) RETURNING ${COLS}`,
+      [m.id, m.workspaceId, m.kind, m.key, m.filename, m.mime, m.size, m.userId, m.derivedFrom ?? null, m.derivation ? JSON.stringify(m.derivation) : null, m.status ?? null, m.width ?? null, m.height ?? null, m.durationMs ?? null])).rows[0]!,
   get: async (q: Queryable, workspaceId: string, id: string, lock = false) =>
     (await q.query<MediaRow>(`SELECT ${COLS} FROM media_assets WHERE workspace_id = $1 AND id = $2 AND status <> 'deleted'${lock ? " FOR UPDATE" : ""}`, [workspaceId, id])).rows[0] ?? null,
   /** Library listing with usage counts (one query, no N+1). */

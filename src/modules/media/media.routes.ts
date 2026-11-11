@@ -30,6 +30,9 @@ export function mediaRoutes(svc: MediaService, authn: RequestHandler) {
   r.post(`${base}/:mediaId/derivatives`, validate({ params: s.mediaParams, body: s.derivativeBody }), async (req, res) => {
     res.status(201).json({ data: await svc.createDerivative(actor(req), p(req).workspaceId, p(req).mediaId, req.body) });
   });
+  r.post(`${base}/:mediaId/video-derivatives`, validate({ params: s.mediaParams, body: s.videoDerivativeBody }), async (req, res) => {
+    res.status(201).json({ data: await svc.createVideoDerivative(actor(req), p(req).workspaceId, p(req).mediaId, req.body) });
+  });
   r.delete(`${base}/:mediaId`, validate({ params: s.mediaParams }), async (req, res) => {
     await svc.remove(actor(req), p(req).workspaceId, p(req).mediaId);
     res.status(204).end();

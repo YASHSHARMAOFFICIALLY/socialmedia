@@ -134,9 +134,9 @@ Second pass (also fixed): `analytics_history_days` enforced when `BILLING_ENFORC
 Still open: none from the review. Unverified in real environments: Dodo sandbox, workerd `/mcp`, Workers pino output, R2 honouring `If-None-Match` on presigned PUT.
 
 ## Not built (and why)
-Built since: Instagram account insights (daily activity) and audience demographics (migration 0028; MCP tools `get_account_activity`, `get_audience_demographics`), MCP browser OAuth (authorization code + PKCE, dynamic client registration), X threads (`metadata.thread`) and polls (`metadata.poll`), YouTube `publishAt`, Instagram carousels with video.
+Built since: video re-encoding/downscaling via Cloudflare Media Transformations (`POST /media/{id}/video-derivatives`, needs `MEDIA_TRANSFORM_ORIGIN`; unverified against a real zone), Instagram account insights (daily activity) and audience demographics (migration 0028; MCP tools `get_account_activity`, `get_audience_demographics`), MCP browser OAuth (authorization code + PKCE, dynamic client registration), X threads (`metadata.thread`) and polls (`metadata.poll`), YouTube `publishAt`, Instagram carousels with video.
 - LinkedIn analytics and organization posting: need the Community Management API (partner approval).
 - X non-public metrics: need user-context OAuth with the paid tier.
-- Video transcoding/compression: needs Cloudflare Stream or Media Transformations (an account-level product), not code.
+- Video transcoding of videos over 100 MB / 10 minutes, or full conversion of videos longer than 60 s: Cloudflare Media Transformations limits (input < 100 MB and 10 min, output <= 60 s per request). Longer videos can only be cut.
 - Billing/admin UI: out of scope (backend only, by decision).
 - Everything in "Unverified in real environments" above.
