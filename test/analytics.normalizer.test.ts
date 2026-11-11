@@ -9,6 +9,15 @@ import { metricsOf } from "./helpers/fake-adapter.js";
 const by = (xs: ReturnType<typeof normalize>) => Object.fromEntries(xs.map((x) => [x.key, x]));
 
 describe("metric normalization", () => {
+  it("Facebook/TikTok/Pinterest names map to canonical keys; interactions only from reported components; clicks stay out of interactions", () => {
+    const raw = (o: Record<string, number | null>) => Object.entries(o).map(([originalName, value]) => ({ originalName, value, availability: value === null ? "unavailable" as const : "available" as const }));
+    const fb = by(normalize("facebook", raw({ post_media_view: 90, post_reactions_by_type_total: 15, comments: 3, shares: null, post_clicks: 7 }), "post"));
+    expect(fb.views!.value).toBe(90);
+    expect(fb.interactions).toMatchObject({ value: 18, components: ["likes", "comments"] });
+    expect(fb.shares).toMatchObject({ value: null, availability: "unavailable" });
+    expect(by(normalize("tiktok", raw({ view_count: 5, like_count: 0 }), "post")).likes).toMatchObject({ value: 0, availability: "available" });
+    expect(by(normalize("pinterest", raw({ OUTBOUND_CLICK: 4, SAVE: 2 }), "post")).outbound_clicks!.value).toBe(4);
+  });
   it("maps X public_metrics to the canonical vocabulary, preserving the original name and definition", () => {
     const n = by(normalize("x", metricsOf({ "public_metrics.impression_count": 1000, "public_metrics.like_count": 40, "public_metrics.reply_count": 5, "public_metrics.retweet_count": 7, "public_metrics.quote_count": 2, "public_metrics.bookmark_count": 3 }).metrics, "post"));
     expect(n.impressions).toMatchObject({ value: 1000, originalName: "public_metrics.impression_count", availability: "available" });

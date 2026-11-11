@@ -1,22 +1,40 @@
 import { PlatformError } from "../core/errors.js";
 import { metaFetch } from "../core/http.js";
 import { withHashtags } from "../core/rules.js";
-import { NO_CAPABILITIES, type ConnectedAccount, type SocialAdapter } from "../core/types.js";
+import { NO_CAPABILITIES, type ConnectedAccount, type RawMetric, type SocialAdapter } from "../core/types.js";
 
 // Verified (developers.facebook.com Pages API, Graph API v27.0): GET /{user}/accounts lists Pages the person can act on, each with a Page
 // access token; POST /{page}/feed {message}; POST /{page}/photos {url, published}; multi-photo = photos with published=false then
 // /feed with attached_media[n]={"media_fbid"}; POST /{page}/videos {file_url, description}. Permissions: pages_manage_posts,
 // pages_read_engagement, pages_show_list (+ publish_video for video). Needs Meta App Review for non-role users.
-// Not verified here (so not claimed): long-lived/never-expiring Page token mechanics beyond the standard fb_exchange_token flow, Page insights.
+// Insights (Graph reference "Page/insights", v27.0; deprecated-metrics page): GET /{id}/insights?metric=a,b[&period=] with a Page token (needs read_insights +
+// pages_read_engagement; ANALYZE task) -> {data:[{name, period, values:[{value, end_time}]}]}. Impression metrics died 2025-06-15 / 2025-11-15 (all versions);
+// replacements used: post_media_view, post_total_media_view_unique, post_clicks, post_reactions_by_type_total (lifetime), page_follows, page_media_view (day).
+// The value envelope is the standard Insights shape (Meta's reference page does not spell it out); comments/shares come from the post edge itself.
+// Meta announced another batch of Page metric deprecations for 2026-06-15: an invalid metric surfaces as a failed collection, not as zeros.
+// Not verified here (so not claimed): long-lived/never-expiring Page token mechanics beyond the standard fb_exchange_token flow.
 const V = "v27.0";
 const GRAPH = `https://graph.facebook.com/${V}`;
-export const FACEBOOK_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "publish_video"];
+export const FACEBOOK_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "read_insights", "publish_video"];
+
+const POST_METRICS = ["post_media_view", "post_total_media_view_unique", "post_clicks", "post_reactions_by_type_total"];
+const num = (originalName: string, v: unknown): RawMetric => typeof v === "number" ? { originalName, value: v, availability: "available" } : { originalName, value: null, availability: "unavailable" };
 
 export function createFacebookAdapter(cfg: { clientId: string; clientSecret: string }, f: typeof fetch = fetch): SocialAdapter {
   const auth = (t: string) => ({ authorization: `Bearer ${t}` });
+  /** name -> latest value; an object value (reactions by type) is summed. */
+  async function insights(token: string, url: string): Promise<Record<string, number | undefined>> {
+    const r = await metaFetch(f, "facebook", url, { headers: auth(token) });
+    const out: Record<string, number | undefined> = {};
+    for (const d of ((await r.json()) as { data?: { name: string; values?: { value?: unknown }[] }[] }).data ?? []) {
+      const v = d.values?.at(-1)?.value;
+      out[d.name] = typeof v === "number" ? v : v && typeof v === "object" ? Object.values(v as Record<string, unknown>).reduce<number>((s, x) => s + (typeof x === "number" ? x : 0), 0) : undefined;
+    }
+    return out;
+  }
   return {
     platform: "facebook",
-    capabilities: { ...NO_CAPABILITIES, textPost: true, imagePost: true, videoPost: true, lookupRecentPosts: true },
+    capabilities: { ...NO_CAPABILITIES, textPost: true, imagePost: true, videoPost: true, lookupRecentPosts: true, postAnalytics: true, accountAnalytics: true },
     oauth: {
       usesPkce: false,
       authorizationUrl: ({ state, redirectUri }) => `https://www.facebook.com/${V}/dialog/oauth?${new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri, scope: FACEBOOK_SCOPES.join(","), response_type: "code", state })}`,
@@ -62,6 +80,19 @@ export function createFacebookAdapter(cfg: { clientId: string; clientSecret: str
       } else id = (await post(`${page}/feed`, { message }, true)).id;
       if (!id) throw new PlatformError("unknown", "facebook accepted the publish but returned no id");
       return { externalId: id, url: `https://www.facebook.com/${id}`, raw: { id } };
+    },
+    async fetchPostMetrics({ accessToken, externalPostId }) {
+      const id = encodeURIComponent(externalPostId);
+      const ins = await insights(accessToken, `${GRAPH}/${id}/insights?${new URLSearchParams({ metric: POST_METRICS.join(",") })}`);
+      const edge = await metaFetch(f, "facebook", `${GRAPH}/${id}?${new URLSearchParams({ fields: "shares,comments.summary(true).limit(0)" })}`, { headers: auth(accessToken) });
+      const e = (await edge.json()) as { shares?: { count?: number }; comments?: { summary?: { total_count?: number } } };
+      // Facebook omits `shares` when a post has none, so a missing field is unavailable (never 0).
+      const metrics = [...POST_METRICS.map((n) => num(n, ins[n])), num("shares", e.shares?.count), num("comments", e.comments?.summary?.total_count)];
+      return { source: "post insights + post edge", raw: { insights: ins, edge: e }, metrics };
+    },
+    async fetchAccountMetrics({ accessToken, account }) {
+      const ins = await insights(accessToken, `${GRAPH}/${account.externalId}/insights?${new URLSearchParams({ metric: "page_follows,page_media_view", period: "day" })}`);
+      return { source: "page insights", raw: ins, metrics: [num("page_follows", ins.page_follows), { ...num("page_media_view", ins.page_media_view), period: "day" as const }] };
     },
     async reconcile({ accessToken, account, content, since }) {
       const r = await metaFetch(f, "facebook", `${GRAPH}/${account.externalId}/posts?fields=id,message,created_time,permalink_url&limit=10`, { headers: auth(accessToken) });

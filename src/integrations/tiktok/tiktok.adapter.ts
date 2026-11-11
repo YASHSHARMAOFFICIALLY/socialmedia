@@ -7,9 +7,13 @@ import { NO_CAPABILITIES, type OAuthTokens, type SocialAdapter } from "../core/t
 // from TikTok's own page titles/URLs via search (/v2/post/publish/video/init/, /v2/post/publish/status/fetch/, source=PULL_FROM_URL);
 // the token endpoint, field names and response shapes come from third-party guides and MUST be checked against first-party docs
 // (and with `npm run test:live`) before relying on this adapter. Unaudited TikTok apps can only post privately.
+// Analytics (search results quoting TikTok's docs; page itself returned 503): POST /v2/video/query/?fields=id,view_count,like_count,comment_count,share_count
+// body {filters:{video_ids:[<=20]}}, scope video.list -> data.videos[]; GET /v2/user/info/?fields=follower_count, scope user.info.stats (per the
+// user-info scope migration bulletin; the v2 page is reported to say user.info.profile: check). Existing connections must re-authorize for the new scopes.
+// A post still processing has only a publish_id, which cannot be queried: its metrics stay unavailable.
 // PULL_FROM_URL requires the media URL's domain/prefix to be verified in the TikTok developer portal (so R2 needs a custom domain).
 const API = "https://open.tiktokapis.com";
-export const TIKTOK_SCOPES = ["user.info.basic", "video.publish"];
+export const TIKTOK_SCOPES = ["user.info.basic", "user.info.stats", "video.list", "video.publish"];
 
 export function createTikTokAdapter(cfg: { clientKey: string; clientSecret: string; pollMs?: number; maxPolls?: number }, f: typeof fetch = fetch): SocialAdapter {
   const auth = (t: string) => ({ authorization: `Bearer ${t}`, "content-type": "application/json; charset=UTF-8" });
@@ -28,7 +32,7 @@ export function createTikTokAdapter(cfg: { clientKey: string; clientSecret: stri
 
   return {
     platform: "tiktok",
-    capabilities: { ...NO_CAPABILITIES, videoPost: true, tokenRefresh: true },
+    capabilities: { ...NO_CAPABILITIES, videoPost: true, tokenRefresh: true, postAnalytics: true, accountAnalytics: true },
     oauth: {
       usesPkce: false,
       authorizationUrl: ({ state, redirectUri }) => `https://www.tiktok.com/v2/auth/authorize/?${new URLSearchParams({ client_key: cfg.clientKey, scope: TIKTOK_SCOPES.join(","), response_type: "code", redirect_uri: redirectUri, state })}`,
@@ -40,6 +44,19 @@ export function createTikTokAdapter(cfg: { clientKey: string; clientSecret: stri
       const u = (await data<{ user?: { open_id?: string; display_name?: string; avatar_url?: string } }>(r)).user;
       if (!u?.open_id) throw new PlatformError("permanent", "tiktok user info returned no open_id");
       return { externalId: u.open_id, displayName: u.display_name ?? "TikTok account", ...(u.avatar_url ? { avatarUrl: u.avatar_url } : {}), accountType: "personal", metadata: {} };
+    },
+    async fetchPostMetrics({ accessToken, externalPostId }) {
+      const fields = ["view_count", "like_count", "comment_count", "share_count"];
+      const none = fields.map((n) => ({ originalName: n, value: null, availability: "unavailable" as const }));
+      if (!/^\d+$/.test(externalPostId)) return { source: "video/query", raw: { reason: "publish_id only" }, metrics: none };
+      const r = await apiFetch(f, "tiktok", `${API}/v2/video/query/?fields=${["id", ...fields].join(",")}`, { method: "POST", headers: auth(accessToken), body: JSON.stringify({ filters: { video_ids: [externalPostId] } }) });
+      const v = (await data<{ videos?: Record<string, unknown>[] }>(r))?.videos?.find((x) => String(x.id) === externalPostId);
+      return { source: "video/query", raw: v ?? {}, metrics: fields.map((n) => typeof v?.[n] === "number" ? { originalName: n, value: v[n] as number, availability: "available" as const } : { originalName: n, value: null, availability: "unavailable" as const }) };
+    },
+    async fetchAccountMetrics({ accessToken }) {
+      const r = await apiFetch(f, "tiktok", `${API}/v2/user/info/?fields=follower_count`, { headers: auth(accessToken) });
+      const u = (await data<{ user?: { follower_count?: number } }>(r))?.user;
+      return { source: "user/info", raw: u ?? {}, metrics: [typeof u?.follower_count === "number" ? { originalName: "follower_count", value: u.follower_count, availability: "available" as const } : { originalName: "follower_count", value: null, availability: "unavailable" as const }] };
     },
     async publish({ accessToken, content, media, signal }) {
       const video = media.find((m) => m.role === "media");

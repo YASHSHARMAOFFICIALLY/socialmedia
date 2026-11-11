@@ -73,19 +73,22 @@ Verified (developers.facebook.com/docs/threads): authorize `threads.com/oauth/au
 
 ### Facebook Pages  (`FACEBOOK_APP_ID/SECRET`, Graph API v27.0)
 Verified: `GET /{user}/accounts` (Pages + Page tokens), `/{page}/feed`, `/{page}/photos`, multi-photo via `attached_media`, `/{page}/videos` (`file_url`).
-- Text, photo, multi-photo, video. Publish only: NO analytics claimed. Scopes `pages_show_list`, `pages_manage_posts`, `pages_read_engagement`, `publish_video`.
+- Text, photo, multi-photo, video. Scopes `pages_show_list`, `pages_manage_posts`, `pages_read_engagement`, `read_insights`, `publish_video` (existing connections must re-authorize for `read_insights`).
+- Analytics (metric names per Meta's Page/insights + deprecated-metrics pages; the response envelope is the standard Insights shape, not spelled out on the page): post `post_media_view`, `post_total_media_view_unique`, `post_clicks`, `post_reactions_by_type_total` (all reaction types summed, stored as `likes` with that definition) + `shares`/`comments` from the post edge; Page `page_follows`, `page_media_view` (day). The old impression metrics are gone (2025-06-15 / 2025-11-15) and Meta announced more Page deprecations for 2026-06-15: a removed metric makes that collection fail visibly, never a zero. Insights on video-object ids may be rejected. Unverified live.
 - GATE: Meta App Review. Page-token lifetime mechanics beyond the standard `fb_exchange_token` flow are NOT verified. No hard text limit documented → none enforced.
 
 ### Pinterest  (`PINTEREST_APP_ID/SECRET`)
 Verified (API v5 OpenAPI spec): token endpoint with HTTP Basic; apps activated after 2025-09-25 get a continuous 60-day refresh token.
 - One image pin from a URL; requires `metadata.boardId`. title ≤100, description ≤800, link ≤2048, alt text ≤500.
-- Only metric: `follower_count`. - Video pin (UNVERIFIED): `POST /v5/media` → multipart upload → poll `GET /v5/media/{id}` → pin with `video_id` + cover (attach an image with role `thumbnail`; required). Endpoints/fields from Pinterest's generated client docs; status values and the cover requirement from third-party/community reports. Not available in the sandbox. File is buffered in memory.
-- Not implemented: pin analytics (response shape unconfirmed), reconcile.
+- Account metric: `follower_count`. Pin analytics (UNVERIFIED shape): `IMPRESSION`, `SAVE`, `PIN_CLICK`, `OUTBOUND_CLICK` over a window capped at 90 days; `lifetime_metrics` preferred, `summary_metrics` fallback.
+- Video pin (UNVERIFIED): `POST /v5/media` → multipart upload → poll `GET /v5/media/{id}` → pin with `video_id` + cover (attach an image with role `thumbnail`; required). Endpoints/fields from Pinterest's generated client docs; status values and the cover requirement from third-party/community reports. Not available in the sandbox. File is buffered in memory.
+- Not implemented: reconcile.
 - GATE: Trial access creates pins visible only to you until Standard access is granted.
 
 ### TikTok  (`TIKTOK_CLIENT_KEY/SECRET`) — UNVERIFIED
 **SOURCE CAVEAT**: developers.tiktok.com is JavaScript-rendered and could not be fetched. Endpoint URLs (`/v2/post/publish/video/init/`, `/v2/post/publish/status/fetch/`, `PULL_FROM_URL`) were confirmed from search titles only; token endpoint and field shapes come from third-party guides. Check against first-party docs and `npm run test:live` before any use.
-- Video only, via `PULL_FROM_URL`; `privacy_level` must be one of the creator's options (queried at publish time); async status polling. No analytics.
+- Video only, via `PULL_FROM_URL`; `privacy_level` must be one of the creator's options (queried at publish time); async status polling.
+- Analytics (UNVERIFIED; docs page returned 503, details from search results quoting it): `POST /v2/video/query/` (`view_count`, `like_count`, `comment_count`, `share_count`; scope `video.list`) and `GET /v2/user/info/?fields=follower_count` (scope `user.info.stats`; TikTok's own pages disagree between `.stats` and `.profile`). A post that is still processing only has a `publish_id`: its metrics stay unavailable. Scopes added, so existing connections must re-authorize.
 - GATE: unaudited apps can post private only. The media URL's domain must be verified in the TikTok portal → R2 needs a custom domain.
 
 ### Bluesky  (credentials; optional `BLUESKY_SERVICE`)

@@ -67,9 +67,30 @@ export const MAPPINGS: Record<Platform, Record<string, Mapping>> = {
     followers_count: m("followers", "Mastodon followers_count"),
   },
   telegram: { member_count: m("followers", "Telegram getChatMemberCount (channel members)") },
-  pinterest: { follower_count: m("followers", "Pinterest user_account follower_count") },
-  facebook: {}, // no Page insights claimed (not verified)
-  tiktok: {},   // no analytics implemented
+  pinterest: {
+    follower_count: m("followers", "Pinterest user_account follower_count"),
+    IMPRESSION: m("impressions", "Pinterest IMPRESSION: times the Pin was on screen"),
+    SAVE: m("saves", "Pinterest SAVE: times the Pin was saved"),
+    PIN_CLICK: m("clicks", "Pinterest PIN_CLICK: clicks to the Pin close-up (not outbound)"),
+    OUTBOUND_CLICK: m("outbound_clicks", "Pinterest OUTBOUND_CLICK: clicks to the destination link"),
+  },
+  facebook: {
+    post_media_view: m("views", "Facebook post_media_view: times the post's content was played or displayed (replaces post impressions)"),
+    post_total_media_view_unique: m("reach", "Facebook post_total_media_view_unique: unique accounts that viewed the post's content"),
+    post_clicks: m("clicks", "Facebook post_clicks: clicks anywhere on the post"),
+    post_reactions_by_type_total: m("likes", "Facebook post_reactions_by_type_total: ALL reaction types summed (not only Like)"),
+    comments: m("comments", "Facebook post comments (summary total_count)"),
+    shares: m("shares", "Facebook post shares (count; absent when none)"),
+    page_follows: m("followers", "Facebook page_follows: Page followers (Meta marks it as possibly estimated)"),
+    page_media_view: m("views", "Facebook page_media_view: Page content views for the day"),
+  },
+  tiktok: {
+    view_count: m("views", "TikTok view_count"),
+    like_count: m("likes", "TikTok like_count"),
+    comment_count: m("comments", "TikTok comment_count"),
+    share_count: m("shares", "TikTok share_count"),
+    follower_count: m("followers", "TikTok follower_count"),
+  },
   linkedin: {}, // LinkedIn exposes no analytics to this app (member post statistics need partner access)
 };
 

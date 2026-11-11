@@ -13,8 +13,13 @@ import { NO_CAPABILITIES, type MetricsResult, type OAuthTokens, type SocialAdapt
 // upload = multipart POST to upload_url with every upload_parameter then the `file` part; GET /v5/media/{id} -> {status} (values registered|processing|succeeded|failed
 // come from third-party guides only); then POST /v5/pins with media_source {source_type:"video_id", media_id, cover_image_url}. A community report says the
 // cover is required in practice, so it is. The file is buffered in memory (ceiling: Workers memory; rules cap video size). Video pins are not available in the sandbox.
-// NOT claimed: pin analytics (response shape not confirmed), reconcile (no lookup-by-content endpoint used).
+// Pin analytics: GET /v5/pins/{id}/analytics?start_date&end_date&metric_types (start <= 90 days ago, range <= 90 days; owner's token) -> an object keyed by
+// app type (default "ALL") of {lifetime_metrics{name:int}, daily_metrics[], summary_metrics{name:float}} (generated client models). Metric names IMPRESSION,
+// SAVE, PIN_CLICK, OUTBOUND_CLICK, VIDEO_MRC_VIEW come from API docs/connector docs; the exact keys inside lifetime_metrics are UNVERIFIED, so lifetime is
+// preferred and the period summary is the fallback. Pins older than 2023-03-20 only have lifetime metrics for video pins.
+// NOT claimed: reconcile (no lookup-by-content endpoint used).
 const API = "https://api.pinterest.com/v5";
+const PIN_METRICS = ["IMPRESSION", "SAVE", "PIN_CLICK", "OUTBOUND_CLICK"];
 export const PINTEREST_SCOPES = ["boards:read", "pins:read", "pins:write", "user_accounts:read"];
 
 export function createPinterestAdapter(cfg: { clientId: string; clientSecret: string; pollMs?: number }, f: typeof fetch = fetch): SocialAdapter {
@@ -53,7 +58,7 @@ export function createPinterestAdapter(cfg: { clientId: string; clientSecret: st
   }
   return {
     platform: "pinterest",
-    capabilities: { ...NO_CAPABILITIES, imagePost: true, videoPost: true, tokenRefresh: true, accountAnalytics: true },
+    capabilities: { ...NO_CAPABILITIES, imagePost: true, videoPost: true, tokenRefresh: true, postAnalytics: true, accountAnalytics: true },
     oauth: {
       usesPkce: false,
       authorizationUrl: ({ state, redirectUri }) => `https://www.pinterest.com/oauth/?${new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri, response_type: "code", scope: PINTEREST_SCOPES.join(","), state })}`,
@@ -86,6 +91,15 @@ export function createPinterestAdapter(cfg: { clientId: string; clientSecret: st
       const pin = (await r.json()) as { id?: string };
       if (!pin.id) throw new PlatformError("unknown", "pinterest accepted the pin but returned no id");
       return { externalId: pin.id, url: `https://www.pinterest.com/pin/${pin.id}/`, raw: pin };
+    },
+    async fetchPostMetrics({ accessToken, externalPostId, publishedAt }): Promise<MetricsResult> {
+      const day = (d: Date) => d.toISOString().slice(0, 10);
+      const today = new Date(), floor = new Date(today.getTime() - 89 * 86400_000);
+      const source = `${API}/pins/${externalPostId}/analytics`;
+      const r = await apiFetch(f, "pinterest", `${source}?${new URLSearchParams({ start_date: day(publishedAt > floor ? publishedAt : floor), end_date: day(today), metric_types: PIN_METRICS.join(",") })}`, { headers: auth(accessToken) });
+      const raw = (await r.json()) as Record<string, { lifetime_metrics?: Record<string, number>; summary_metrics?: Record<string, number> }>;
+      const all = raw.ALL ?? Object.values(raw)[0];
+      return { source, raw, metrics: PIN_METRICS.map((n) => { const v = all?.lifetime_metrics?.[n] ?? all?.summary_metrics?.[n]; return typeof v === "number" ? { originalName: n, value: v, availability: "available" as const } : { originalName: n, value: null, availability: "unavailable" as const }; }) };
     },
     async fetchAccountMetrics({ accessToken }): Promise<MetricsResult> {
       const source = `${API}/user_account`;

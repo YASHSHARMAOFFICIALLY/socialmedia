@@ -239,6 +239,27 @@ describe("Threads", () => {
 
 describe("Facebook Pages", () => {
   const ad = (f: typeof fetch) => createFacebookAdapter({ clientId: "cid", clientSecret: "sec" }, f);
+  it("post metrics: replacement media-view insights, reactions summed, missing shares unavailable (never 0)", async () => {
+    const h = harness((c) => c.url.includes("/insights") ? Response.json({ data: [
+      { name: "post_media_view", period: "lifetime", values: [{ value: 900 }] },
+      { name: "post_total_media_view_unique", period: "lifetime", values: [{ value: 700 }] },
+      { name: "post_reactions_by_type_total", period: "lifetime", values: [{ value: { like: 10, love: 5 } }] }] })
+      : Response.json({ comments: { summary: { total_count: 3 } } }));
+    const m = (await ad(h.f).fetchPostMetrics!({ accessToken: "PT", account: { externalId: "p1", metadata: {} }, externalPostId: "p1_9", publishedAt: new Date() })).metrics;
+    const get = (n: string) => m.find((x) => x.originalName === n)!;
+    expect(h.calls[0]!.url).toContain("metric=post_media_view%2Cpost_total_media_view_unique%2Cpost_clicks%2Cpost_reactions_by_type_total");
+    expect(get("post_media_view")).toMatchObject({ value: 900, availability: "available" });
+    expect(get("post_reactions_by_type_total").value).toBe(15);
+    expect(get("post_clicks")).toMatchObject({ value: null, availability: "unavailable" });
+    expect(get("comments").value).toBe(3);
+    expect(get("shares")).toMatchObject({ value: null, availability: "unavailable" });
+  });
+  it("account metrics: page_follows and daily page_media_view", async () => {
+    const h = harness(() => Response.json({ data: [{ name: "page_follows", values: [{ value: 1 }, { value: 120 }] }, { name: "page_media_view", values: [{ value: 40 }] }] }));
+    const m = (await ad(h.f).fetchAccountMetrics!({ accessToken: "PT", account: { externalId: "p1", metadata: {} } })).metrics;
+    expect(h.calls[0]!.url).toContain("p1/insights");
+    expect(m).toEqual([{ originalName: "page_follows", value: 120, availability: "available" }, { originalName: "page_media_view", value: 40, availability: "available", period: "day" }]);
+  });
   it("exchanges for a long-lived user token, then lists each Page with its own Page token", async () => {
     const h = harness((c) => c.url.includes("oauth/access_token") ? Response.json({ access_token: c.url.includes("fb_exchange_token") ? "LONG" : "SHORT" }) : Response.json({ data: [{ id: "p1", name: "Shop", access_token: "PT1", picture: { data: { url: "https://pic" } } }, { id: "p2", name: "No token" }] }));
     const a = ad(h.f);
@@ -262,12 +283,11 @@ describe("Facebook Pages", () => {
     await a.publish!(input(content(), [mk("video")]));
     expect(h.calls[5]).toMatchObject({ url: expect.stringMatching(/\/acct1\/videos$/), body: { file_url: "https://r2.example/obj", description: "Hello" } });
   });
-  it("errors: 190 -> auth_expired, 5xx on create -> unknown; capabilities do not claim analytics", async () => {
+  it("errors: 190 -> auth_expired, 5xx on create -> unknown; tokenRefresh is still not claimed", async () => {
     expect((await errKind(ad(harness(() => Response.json({ error: { code: 190 } }, { status: 400 })).f).publish!(input(content()))))?.kind).toBe("auth_expired");
     expect((await errKind(ad(harness(() => new Response("", { status: 503 })).f).publish!(input(content()))))?.kind).toBe("unknown");
     const a = ad(fetch);
-    expect(a.capabilities).toMatchObject({ postAnalytics: false, accountAnalytics: false, tokenRefresh: false });
-    expect(a.fetchPostMetrics).toBeUndefined();
+    expect(a.capabilities).toMatchObject({ postAnalytics: true, accountAnalytics: true, tokenRefresh: false });
   });
 });
 
@@ -312,6 +332,17 @@ describe("Pinterest", () => {
     expect(h.calls.some((c) => c.url.endsWith("/v5/pins"))).toBe(false);
     expect((await errKind(ad(h.f).publish!(input(content({ metadata: { boardId: "99" } }), [mk("video")]))))?.kind).toBe("permanent");
   });
+  it("pin analytics: requested window is capped at 90 days; lifetime preferred, summary fallback, missing = unavailable", async () => {
+    const h = harness(() => Response.json({ ALL: { lifetime_metrics: { IMPRESSION: 500 }, summary_metrics: { IMPRESSION: 20, SAVE: 4.0 } } }));
+    const m = (await ad(h.f).fetchPostMetrics!({ accessToken: "A", account: { externalId: "u", metadata: {} }, externalPostId: "123", publishedAt: new Date("2020-01-01") })).metrics;
+    const u = new URL(h.calls[0]!.url);
+    expect(u.pathname).toBe("/v5/pins/123/analytics");
+    expect(u.searchParams.get("metric_types")).toBe("IMPRESSION,SAVE,PIN_CLICK,OUTBOUND_CLICK");
+    expect((Date.parse(u.searchParams.get("end_date")!) - Date.parse(u.searchParams.get("start_date")!)) / 86400_000).toBeLessThanOrEqual(89);
+    expect(m.find((x) => x.originalName === "IMPRESSION")!.value).toBe(500);
+    expect(m.find((x) => x.originalName === "SAVE")!.value).toBe(4);
+    expect(m.find((x) => x.originalName === "PIN_CLICK")).toMatchObject({ value: null, availability: "unavailable" });
+  });
   it("rules enforce the spec limits and boardId", () => {
     const r = contentRules.pinterest;
     expect(r.validate(content({ metadata: { boardId: "1" }, media: [mediaOf("video"), { ...mediaOf("image"), role: "thumbnail" as const }] })).map((i) => i.code)).toEqual([]);
@@ -325,6 +356,18 @@ describe("Pinterest", () => {
 
 describe("TikTok (endpoints per search-confirmed titles; shapes unverified)", () => {
   const ad = (f: typeof fetch) => createTikTokAdapter({ clientKey: "ck", clientSecret: "cs", pollMs: 1, maxPolls: 3 }, f);
+  it("analytics: video/query by id (fields in the query, id in the filter); publish_id-only posts are unavailable without a call; follower_count", async () => {
+    const h = harness((c) => Response.json({ data: c.url.includes("video/query") ? { videos: [{ id: "777", view_count: 10, like_count: 0, comment_count: 2 }] } : { user: { follower_count: 55 } }, error: { code: "ok" } }));
+    const m = (await ad(h.f).fetchPostMetrics!({ accessToken: "T", account: { externalId: "o", metadata: {} }, externalPostId: "777", publishedAt: new Date() })).metrics;
+    expect(h.calls[0]).toMatchObject({ method: "POST", body: { filters: { video_ids: ["777"] } } });
+    expect(h.calls[0]!.url).toContain("fields=id,view_count,like_count,comment_count,share_count");
+    expect(m.find((x) => x.originalName === "like_count")).toMatchObject({ value: 0, availability: "available" });
+    expect(m.find((x) => x.originalName === "share_count")).toMatchObject({ value: null, availability: "unavailable" });
+    const pending = await ad(h.f).fetchPostMetrics!({ accessToken: "T", account: { externalId: "o", metadata: {} }, externalPostId: "v_pub_file~v2.123", publishedAt: new Date() });
+    expect(h.calls).toHaveLength(1);
+    expect(pending.metrics.every((x) => x.availability === "unavailable")).toBe(true);
+    expect((await ad(h.f).fetchAccountMetrics!({ accessToken: "T", account: { externalId: "o", metadata: {} } })).metrics[0]).toMatchObject({ originalName: "follower_count", value: 55 });
+  });
   const route = (status: string) => (c: Call) => Response.json({ data: c.url.includes("creator_info") ? { privacy_level_options: ["SELF_ONLY", "PUBLIC_TO_EVERYONE"] } : c.url.includes("init") ? { publish_id: "pub1" } : { status, publicaly_available_post_id: [777] }, error: { code: "ok" } });
   it("refuses a privacy level the creator does not allow", async () => {
     expect((await errKind(ad(harness(route("PUBLISH_COMPLETE")).f).publish!(input(content({ metadata: { privacy: "FOLLOWERS" } }), [mk("video")]))))?.kind).toBe("permanent");
