@@ -21,6 +21,20 @@ describe("billing endpoints for a UI + operator admin", async () => {
     await off.close();
   });
 
+  it("summary: subscriber counts per plan/status, MRR per currency (yearly / 12, cancelling ones excluded), webhook health", async () => {
+    const ins = (ws: string, interval: string, cancelAtEnd = false) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval, cancel_at_period_end) SELECT $1, v.id, 'active', 'USD', $2, $3 FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'starter' AND v.active", [ws, interval, cancelAtEnd]);
+    await t.db.query("DELETE FROM billing_subscriptions");
+    await t.db.query("INSERT INTO billing_prices (plan_version_id, currency, interval, amount_minor) SELECT v.id, 'USD', 'year', 9000 FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'starter' AND v.active ON CONFLICT DO NOTHING");   // seed has monthly prices only
+    const a = await world(t, ["linkedin"]), b = await world(t, ["linkedin"]), c = await world(t, ["linkedin"]);
+    await ins(a.ws, "month"); await ins(b.ws, "year"); await ins(c.ws, "month", true);
+    const price = async (interval: string) => Number((await t.db.query<{ a: string }>("SELECT pr.amount_minor::text AS a FROM billing_prices pr JOIN billing_plan_versions v ON v.id = pr.plan_version_id JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'starter' AND v.active AND pr.currency = 'USD' AND pr.interval = $1", [interval])).rows[0]!.a);
+    const r = await admin("get", "/admin/billing/summary");
+    expect(r.status).toBe(200);
+    expect(r.body.data.subscriptions.find((s: { plan: string; status: string; currency: string }) => s.plan === "starter" && s.status === "active" && s.currency === "USD").n).toBe(3);
+    expect(r.body.data.mrrMinorByCurrency.USD).toBe(Math.round((await price("month")) + (await price("year")) / 12));
+    expect((await admin("get", "/admin/billing/summary", null)).status).toBe(401);
+  });
+
   it("publishing a plan version sets real prices without touching existing subscribers; provider refs are set per version", async () => {
     const { owner, ws } = await world(t, ["linkedin"]);
     await t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'pro'", [ws]);

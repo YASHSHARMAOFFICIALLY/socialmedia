@@ -33,6 +33,19 @@ export function billingAdminRoutes(d: { db: Db; pay: BillingPayments; opsToken?:
     const q = req.query as unknown as { status: string; limit: number };
     res.json({ data: (await d.db.query("SELECT id, provider, event_id, event_type, status, attempts, last_error, received_at, processed_at FROM billing_webhook_events WHERE status = $1 ORDER BY received_at DESC LIMIT $2", [q.status, q.limit])).rows });
   });
+  /** Operator overview: who is on which plan, expected monthly recurring revenue per currency, and whether webhook processing is healthy. Aggregates only, no customer data. */
+  r.get("/admin/billing/summary", async (_req, res) => {
+    const subs = (await d.db.query<{ plan: string; status: string; currency: string; n: number }>(
+      `SELECT p.key AS plan, s.status, s.currency, count(*)::int AS n FROM billing_subscriptions s JOIN billing_plan_versions v ON v.id = s.plan_version_id JOIN billing_plans p ON p.id = v.plan_id
+        WHERE s.status <> 'canceled' GROUP BY 1,2,3 ORDER BY 1,2,3`)).rows;
+    // MRR = monthly price for monthly subscriptions + yearly price / 12 for yearly ones, for subscriptions that currently grant access and are not ending.
+    const mrr = (await d.db.query<{ currency: string; mrr_minor: string }>(
+      `SELECT s.currency, round(sum(CASE s.interval WHEN 'year' THEN pr.amount_minor / 12.0 ELSE pr.amount_minor END))::text AS mrr_minor
+         FROM billing_subscriptions s JOIN billing_prices pr ON pr.plan_version_id = s.plan_version_id AND pr.currency = s.currency AND pr.interval = s.interval
+        WHERE s.status IN ('active','trialing','past_due') AND NOT s.cancel_at_period_end GROUP BY 1 ORDER BY 1`)).rows;
+    const hooks = (await d.db.query<{ status: string; n: number }>("SELECT status, count(*)::int AS n FROM billing_webhook_events WHERE received_at > now() - interval '7 days' GROUP BY 1")).rows;
+    res.json({ data: { subscriptions: subs, mrrMinorByCurrency: Object.fromEntries(mrr.map((m) => [m.currency, Number(m.mrr_minor)])), webhookEventsLast7Days: Object.fromEntries(hooks.map((h) => [h.status, h.n])) } });
+  });
   r.post("/admin/billing/webhook-events/:id/retry", validate({ params: z.object({ id: z.uuid() }) }), async (req, res) => {
     const id = (req.params as { id: string }).id;
     const u = await d.db.query("UPDATE billing_webhook_events SET status = 'received', attempts = 0, next_attempt_at = now(), last_error = NULL WHERE id = $1 AND status IN ('failed','received','ignored')", [id]);
