@@ -68,7 +68,7 @@ describe("credentials-mode and multi-account connect", async () => {
     const { owner, ws } = await setup();
     const start = await owner.agent.post(`/workspaces/${ws}/accounts/connect`).send({ platform: "facebook" });
     const state = new URL(start.body.data.authorizationUrl).searchParams.get("state")!;
-    const cb = await request(t.app).get(`/oauth/facebook/callback?code=C&state=${state}`);
+    const cb = await owner.agent.get(`/oauth/facebook/callback?code=C&state=${state}`);
     expect(cb.status).toBe(302);
     const list = (await owner.agent.get(`/workspaces/${ws}/accounts`)).body.data as { id: string; external_id: string }[];
     expect(list.map((a) => a.external_id).sort()).toEqual(["p1", "p2"]);
@@ -83,7 +83,7 @@ describe("credentials-mode and multi-account connect", async () => {
     const { owner, ws } = await setup();
     const connect = async (reconnect?: string) => {
       const url = reconnect ? (await owner.agent.post(`/workspaces/${ws}/accounts/${reconnect}/refresh`)).body.data.authorizationUrl : (await owner.agent.post(`/workspaces/${ws}/accounts/connect`).send({ platform: "facebook" })).body.data.authorizationUrl;
-      return request(t.app).get(`/oauth/facebook/callback?code=C&state=${new URL(url).searchParams.get("state")}`);
+      return owner.agent.get(`/oauth/facebook/callback?code=C&state=${new URL(url).searchParams.get("state")}`);
     };
     await connect();
     const first = ((await owner.agent.get(`/workspaces/${ws}/accounts`)).body.data as { id: string; external_id: string }[]).find((a) => a.external_id === "p1")!;

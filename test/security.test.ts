@@ -13,7 +13,7 @@ import { world } from "./helpers/world.js";
 import { createTestDb } from "./helpers/pglite-db.js";
 import { migrate } from "../src/infrastructure/database/migrate.js";
 
-const PUBLIC_PREFIXES = ["/health/", "/openapi.json", "/docs", "/api/auth/", "/oauth/{platform}/callback", "/webhooks/"];
+const PUBLIC_PREFIXES = ["/health/", "/openapi.json", "/docs", "/api/auth/", "/webhooks/"];
 const isPublic = (p: string) => PUBLIC_PREFIXES.some((x) => p === x.replace(/\/$/, "") || p.startsWith(x));
 const NIL = "00000000-0000-4000-8000-000000000001";
 const fill = (p: string, ws: string) => p.replace("{workspaceId}", ws).replace("{platform}", "x").replace(/\{(\w+)\}/g, NIL);

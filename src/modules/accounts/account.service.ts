@@ -153,13 +153,14 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
       return { authorizationUrl: await beginAuthorization(a, workspaceId, platform) };
     },
 
-    /** Public endpoint (browser redirect from the platform). Trust comes only from the single-use state row. */
-    async handleCallback(platform: Platform, q: { code?: string | undefined; state?: string | undefined; error?: string | undefined }) {
+    /** Browser redirect from the platform. Trust = single-use state row AND the logged-in user being the one who started the flow. */
+    async handleCallback(platform: Platform, q: { code?: string | undefined; state?: string | undefined; error?: string | undefined }, userId: string) {
       if (!q.state) throw badRequest("Missing state");
       const adapter = registry.get(platform);
       const stateHash = sha256(q.state);
       const st = await repo.consumeState(db, stateHash, platform); // consumed even if the user denied: state is single-use
       if (!st) throw badRequest("Invalid or expired state");
+      if (st.user_id !== userId) throw badRequest("This authorization was started by a different user"); // state is already burned
       if (q.error || !q.code) throw badRequest(`Authorization was not granted${q.error ? `: ${q.error}` : ""}`);
 
       const verifier = st.code_verifier_enc ? await cipher().decrypt(st.code_verifier_enc, `state:${stateHash}`) : undefined;
@@ -176,7 +177,13 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
         // The initiating user must still be allowed to manage accounts (membership/role may have changed in the meantime).
         await workspaces.authorize(st.user_id, st.workspace_id, "accounts:manage", tx);
         const saved = [];
-        for (const f of found) saved.push(await store(tx, st.workspace_id, st.user_id, platform, f));
+        await tx.query("SELECT 1 FROM workspaces WHERE id = $1 FOR UPDATE", [st.workspace_id]);   // serialize count-then-insert against parallel connects
+        for (const f of found) {
+          // One grant can carry many accounts (Facebook Pages): each NEW one must fit the plan, not just the first.
+          const known = (await tx.query("SELECT 1 FROM social_accounts WHERE workspace_id = $1 AND platform = $2 AND external_id = $3 AND status <> 'disconnected'", [st.workspace_id, platform, f.profile.externalId])).rowCount;
+          if (!known) await gate(st.workspace_id, "connected_accounts", 1, tx);
+          saved.push(await store(tx, st.workspace_id, st.user_id, platform, f));
+        }
         return saved;
       });
     },

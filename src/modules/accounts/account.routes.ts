@@ -11,9 +11,10 @@ export function accountRoutes(svc: AccountService, authn: RequestHandler, opts: 
   const r = Router();
   const p = (req: { params: unknown }) => req.params as { workspaceId: string; accountId: string; platform: Platform };
 
-  // Public: the platform redirects the user's browser here. Validated solely via single-use state.
-  r.get("/oauth/:platform/callback", validate({ params: s.callbackParams, query: s.callbackQuery }), async (req, res) => {
-    const accts = await svc.handleCallback(p(req).platform, req.query as never);
+  // The platform redirects the user's browser here (top-level GET, so the SameSite=Lax session cookie is sent). The session must
+  // belong to the user who started the flow, otherwise a victim could be tricked into attaching their account to an attacker's workspace.
+  r.get("/oauth/:platform/callback", authn, validate({ params: s.callbackParams, query: s.callbackQuery }), async (req, res) => {
+    const accts = await svc.handleCallback(p(req).platform, req.query as never, req.user!.id);
     if (opts.appUrl) res.redirect(302, `${opts.appUrl}/accounts?connected=${accts.map((a) => a.id).join(",")}`);
     else res.json({ data: accts.length === 1 ? accts[0] : accts });
   });

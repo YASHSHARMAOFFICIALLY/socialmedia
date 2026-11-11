@@ -54,7 +54,7 @@ Verified (Meta developer docs: Business Login for Instagram, Content Publishing)
 - Reels specs (duration, codec, size) are not confirmed → warning only.
 
 ## Connect modes (all platforms)
-* **OAuth** (LinkedIn, X, YouTube, Instagram, Threads, Facebook, Pinterest, TikTok): `POST …/accounts/connect` → authorization URL → callback. The callback may connect several accounts (Facebook: one per Page, each with its own Page token; reconnecting keeps only the matching Page); the callback JSON is an array when more than one account was connected.
+* **OAuth** (LinkedIn, X, YouTube, Instagram, Threads, Facebook, Pinterest, TikTok): `POST …/accounts/connect` → authorization URL → callback (the callback needs the SAME logged-in session that started the flow, otherwise a victim's authorization could be attached to an attacker's workspace). The callback may connect several accounts (Facebook: one per Page, each with its own Page token; reconnecting keeps only the matching Page); the callback JSON is an array when more than one account was connected.
 * **Credentials** (Bluesky, Mastodon, Telegram; adapters expose `credentials`, `oauth = NO_OAUTH`): `POST /workspaces/{ws}/accounts/connect-credentials {platform, fields}`. Fields: bluesky `identifier` + `appPassword`; mastodon `instance` + `accessToken`; telegram `botToken` + `chat`. The adapter validates them against the platform before anything is stored.
 * `GET /platforms` returns `connect` (`"oauth"` | `"credentials"` | `null` when not configured) and, for credentials platforms, `fields` (name, label, secret, help).
 * Bluesky, Mastodon and Telegram are always registered (no app credentials). The OAuth ones register only when their env vars are set.

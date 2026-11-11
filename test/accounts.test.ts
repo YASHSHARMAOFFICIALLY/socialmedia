@@ -16,9 +16,11 @@ const fakeLinkedIn = (async (url: string | URL | Request) => {
 describe("social accounts + OAuth", async () => {
   const t = await createTestApp([createLinkedInAdapter({ clientId: "cid", clientSecret: "sec" }, fakeLinkedIn)]);
   afterAll(t.close);
+  let cbUser: Awaited<ReturnType<typeof t.newUser>> | undefined;
   const setup = async () => {
     const owner = await t.newUser("owner");
     const ws = (await owner.agent.post("/workspaces").send({ name: "W" })).body.data.id as string;
+    cbUser = owner;
     return { owner, ws };
   };
   const startOAuth = async (u: Awaited<ReturnType<typeof t.newUser>>, ws: string) => {
@@ -26,7 +28,19 @@ describe("social accounts + OAuth", async () => {
     expect(r.status).toBe(200);
     return new URL(r.body.data.authorizationUrl).searchParams.get("state")!;
   };
-  const cb = (state: string, extra = "code=AUTHCODE") => t.deps && import("supertest").then((m) => m.default(t.app).get(`/oauth/linkedin/callback?${extra}&state=${state}`));
+  const cb = (state: string, extra = "code=AUTHCODE", as = cbUser) => as!.agent.get(`/oauth/linkedin/callback?${extra}&state=${state}`);
+
+  it("a victim's browser cannot complete an attacker-initiated flow (callback must belong to the initiating user)", async () => {
+    const { owner, ws } = await setup();
+    const state = await startOAuth(owner, ws);
+    const victim = await t.newUser("victim");
+    const res = await cb(state, "code=AUTHCODE", victim);
+    expect(res.status).toBe(400);
+    expect((await owner.agent.get(`/workspaces/${ws}/accounts`)).body.data).toHaveLength(0);
+    expect((await t.db.query("SELECT 1 FROM oauth_credentials")).rowCount).toBe(0);
+    const anon = await import("supertest").then((m) => m.default(t.app).get(`/oauth/linkedin/callback?code=A&state=${state}`));
+    expect(anon.status).toBe(401);
+  });
 
   it("connect → callback stores an encrypted credential and returns no tokens", async () => {
     const { owner, ws } = await setup();
