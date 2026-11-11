@@ -10,6 +10,7 @@ const platform = z.enum(PLATFORMS);
 const grain = z.enum(["day", "week", "month"]);
 export const rangeQuery = z.object({ from: date.optional(), to: date.optional() });
 export const overviewQuery = rangeQuery.extend({ platform: platform.optional() });
+export const activityQuery = rangeQuery.extend({ platform: platform.optional(), accountId: z.uuid().optional() });
 export const grainQuery = rangeQuery.extend({ grain: grain.optional() });
 export const postQuery = z.object({ grain: grain.optional() });
 export const trendsQuery = rangeQuery.extend({ metric: z.string().min(1).max(50), grain: grain.optional(), platform: platform.optional(), accountId: z.uuid().optional() });

@@ -134,10 +134,9 @@ Second pass (also fixed): `analytics_history_days` enforced when `BILLING_ENFORC
 Still open: none from the review. Unverified in real environments: Dodo sandbox, workerd `/mcp`, Workers pino output, R2 honouring `If-None-Match` on presigned PUT.
 
 ## Not built (and why)
-Built since: MCP browser OAuth (authorization code + PKCE, dynamic client registration), X threads (`metadata.thread`) and polls (`metadata.poll`), YouTube `publishAt`, Instagram carousels with video.
+Built since: Instagram account insights (daily activity) and audience demographics (migration 0028; MCP tools `get_account_activity`, `get_audience_demographics`), MCP browser OAuth (authorization code + PKCE, dynamic client registration), X threads (`metadata.thread`) and polls (`metadata.poll`), YouTube `publishAt`, Instagram carousels with video.
 - LinkedIn analytics and organization posting: need the Community Management API (partner approval).
 - X non-public metrics: need user-context OAuth with the paid tier.
-- Instagram account insights time series and demographics: needs period-day storage (aggregates are lifetime-counter based) and the exact Graph API shapes verified in a real account; deliberately not guessed.
 - Video transcoding/compression: needs Cloudflare Stream or Media Transformations (an account-level product), not code.
 - Billing/admin UI: out of scope (backend only, by decision).
 - Everything in "Unverified in real environments" above.

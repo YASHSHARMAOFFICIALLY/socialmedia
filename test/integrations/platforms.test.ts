@@ -261,4 +261,40 @@ describe("Instagram adapter (mocked API)", () => {
     expect(kids).toHaveLength(2);
     expect(kids.find((k) => k.video_url)?.media_type).toBe("VIDEO");
   });
+  it("account insights: day metrics via metric_type=total_value (fallback one by one on 400, followers never lost); audience parses breakdowns and reports refusals", async () => {
+    const ig = createInstagramAdapter({ clientId: "a", clientSecret: "s" } as never, harness(() => Response.json({})).f);
+    expect(ig.fetchAudience).toBeDefined();
+    const acct = { externalId: "17841", metadata: {} };
+    let strict = true;
+    const h = harness((c) => {
+      if (c.url.includes("fields=followers_count")) return Response.json({ followers_count: 1234 });
+      const metric = new URL(c.url).searchParams.get("metric")!;
+      if (strict && metric.includes(",")) return new Response("bad", { status: 400 });              // one unsupported metric fails the grouped request
+      if (metric === "views") return new Response("bad", { status: 400 });
+      return Response.json({ data: [{ name: metric, period: "day", total_value: { value: metric === "reach" ? 321 : 7 } }] });
+    });
+    const a = createInstagramAdapter({ clientId: "a", clientSecret: "s" } as never, h.f);
+    const r = await a.fetchAccountMetrics!({ accessToken: "T", account: acct });
+    const by = Object.fromEntries(r.metrics.map((m) => [m.originalName, m]));
+    expect(by.followers_count).toMatchObject({ value: 1234, availability: "available" });
+    expect(by.reach).toMatchObject({ value: 321, period: "day", availability: "available" });
+    expect(by.views).toMatchObject({ value: null, availability: "unavailable", period: "day" });     // refused: unavailable, not 0
+    const groupedUrl = new URL(h.calls.find((c) => c.url.includes("/insights"))!.url);
+    expect(groupedUrl.pathname).toContain("/17841/insights");
+    expect(groupedUrl.searchParams.get("period")).toBe("day");
+    expect(groupedUrl.searchParams.get("metric_type")).toBe("total_value");
+    strict = false;
+    const ha = harness((c) => {
+      const u = new URL(c.url);
+      if (u.searchParams.get("metric") === "engaged_audience_demographics") return new Response("<100 engagements", { status: 400 });
+      if (u.searchParams.get("breakdown") === "city") return Response.json({ data: [{ total_value: { breakdowns: [{ results: [] }] } }] });
+      return Response.json({ data: [{ name: "follower_demographics", total_value: { breakdowns: [{ dimension_keys: [u.searchParams.get("breakdown")], results: [{ dimension_values: ["F", "25-34"], value: 10 }, { dimension_values: ["M", "25-34"], value: 5 }] }] } }] });
+    });
+    const aud = await createInstagramAdapter({ clientId: "a", clientSecret: "s" } as never, ha.f).fetchAudience!({ accessToken: "T", account: acct });
+    expect(aud.rows.map((x) => `${x.kind}/${x.breakdown}`)).toEqual(["follower/age", "follower/gender", "follower/country"]);
+    expect(aud.rows[0]!.values).toEqual({ "F/25-34": 10, "M/25-34": 5 });
+    expect(aud.unavailable["follower_demographics_city"]).toBeNull();                              // empty result = unavailable
+    expect(aud.unavailable["engaged_audience_demographics_age"]).toBe(400);
+    expect(new URL(ha.calls[0]!.url).searchParams.get("timeframe")).toBe("this_month");
+  });
 });

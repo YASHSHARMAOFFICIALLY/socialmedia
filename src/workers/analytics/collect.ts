@@ -47,6 +47,13 @@ export async function collectTarget(deps: AnalyticsDeps, targetId: string): Prom
       await repo.bumpVersion(q, t.workspace_id);
       await repo.finishOk(q, t.id, token, nextCollectionDelayS(t.scope, age));
     });
+    // Audience demographics change slowly: refresh weekly. Best effort, it must never fail the (already stored) account collection.
+    if (t.scope === "account" && adapter.fetchAudience && !(await repo.audienceFresh(db, t.social_account_id, 6))) {
+      try {
+        const aud = await adapter.fetchAudience({ accessToken, account });
+        await db.tx(async (q) => { for (const row of aud.rows) await repo.upsertAudience(q, t, row); await repo.bumpVersion(q, t.workspace_id); });
+      } catch (e) { log.warn({ targetId, err: (e as Error).message }, "audience collection failed"); }
+    }
     return "collected";
   } catch (err) {
     const { delayS, disable } = failureDelay(err, t.failures);

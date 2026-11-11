@@ -17,6 +17,8 @@ export function analyticsRoutes(svc: AnalyticsService, authn: RequestHandler) {
   r.get(`${base}/overview`, validate({ params: s.wsParam, query: s.overviewQuery }), async (req, res) => { res.json({ data: await svc.overview(actor(req), p(req).workspaceId, q(req)) }); });
   r.get(`${base}/platforms/:platform`, validate({ params: s.platformParams, query: s.grainQuery }), async (req, res) => { res.json({ data: await svc.platform(actor(req), p(req).workspaceId, p(req).platform, q(req)) }); });
   r.get(`${base}/accounts/:accountId`, validate({ params: s.accountParams, query: s.grainQuery }), async (req, res) => { res.json({ data: await svc.account(actor(req), p(req).workspaceId, p(req).accountId, q(req)) }); });
+  r.get(`${base}/activity`, validate({ params: s.wsParam, query: s.activityQuery }), async (req, res) => { res.json({ data: await svc.activity(actor(req), p(req).workspaceId, q(req)) }); });
+  r.get(`${base}/accounts/:accountId/audience`, validate({ params: s.accountParams }), async (req, res) => { res.json({ data: await svc.audience(actor(req), p(req).workspaceId, p(req).accountId) }); });
   r.get(`${base}/posts/:postId`, validate({ params: s.postParams, query: s.postQuery }), async (req, res) => { res.json({ data: await svc.post(actor(req), p(req).workspaceId, p(req).postId, q(req)) }); });
   r.get(`${base}/trends`, validate({ params: s.wsParam, query: s.trendsQuery }), async (req, res) => { res.json({ data: await svc.trends(actor(req), p(req).workspaceId, q(req)) }); });
   r.get(`${base}/compare/platforms`, validate({ params: s.wsParam, query: s.rangeQuery }), async (req, res) => { res.json({ data: await svc.comparePlatforms(actor(req), p(req).workspaceId, q(req)) }); });

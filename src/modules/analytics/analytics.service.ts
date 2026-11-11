@@ -170,6 +170,41 @@ export function createAnalyticsService(deps: { db: Db; workspaces: WorkspaceServ
       });
     },
 
+    /**
+     * Daily account activity (reach, views, accounts engaged, ...): one point per account per day, each the platform's total for the 24 hours
+     * before that day's last collection. Daily values are NOT added together here: reach and engaged accounts are unique counts, so a sum over days
+     * or accounts would double count people. A day with no collection has no point (never zero).
+     */
+    async activity(a: Actor, workspaceId: string, q: Partial<Range> & { platform?: string | undefined; accountId?: string | undefined }) {
+      await workspaces.authorize(a.id, workspaceId, "analytics:read");
+      const r = { ...defaultRange(), ...stripUndefined(q) } as Range; checkRange(r); await history(workspaceId, r);
+      const [rows, defs] = await Promise.all([repo.activityRows(db, workspaceId, r.from, r.to, q.platform, q.accountId), repo.definitions(db)]);
+      const label = new Map(defs.rows.map((d) => [d.key, d.label]));
+      const by = new Map<string, { accountId: string; platform: string; metric: string; label: string; points: { day: string; value: number | null }[] }>();
+      for (const x of rows.rows) {
+        const k = `${x.social_account_id}|${x.metric_key}`;
+        const e = by.get(k) ?? { accountId: x.social_account_id, platform: x.platform, metric: x.metric_key, label: label.get(x.metric_key) ?? x.metric_key, points: [] };
+        e.points.push({ day: x.day, value: num(x.value) });
+        by.set(k, e);
+      }
+      return { range: r, series: [...by.values()], note: "Each point covers the 24 hours before that day's last collection. Values are unique counts per account and are not summed across days or accounts. A missing day means nothing was collected; a null value means the platform did not report it." };
+    },
+
+    /** Who follows / engages with an account (age, gender, city, country), as the platform last reported it. Empty when the platform withholds it (e.g. under 100 followers). */
+    async audience(a: Actor, workspaceId: string, accountId: string) {
+      await workspaces.authorize(a.id, workspaceId, "analytics:read");
+      const acct = (await repo.accounts(db, workspaceId)).rows.find((x) => x.id === accountId);
+      if (!acct) throw notFound("Account");
+      const rows = (await repo.audience(db, workspaceId, accountId)).rows;
+      const pick = (kind: string) => Object.fromEntries(rows.filter((x) => x.kind === kind).map((x) => [x.breakdown, x.data]));
+      return {
+        account: { id: acct.id, name: acct.display_name, platform: acct.platform },
+        follower: pick("follower"), engaged: pick("engaged"),
+        collectedAt: rows.map((x) => x.collected_at).sort().at(-1) ?? null,
+        note: rows.length ? "Counts per audience segment as reported by the platform for the timeframe shown on each breakdown. Segment keys are the platform's own (for example F.25-34 for gender.age)." : "No audience data: the platform has not provided any (Instagram requires 100+ followers, 100+ engagements for the engaged audience) or it has not been collected yet.",
+      };
+    },
+
     /** One post: every published destination, latest value of every metric WITH its availability, history, engagement rate. */
     async post(a: Actor, workspaceId: string, postId: string, q: { grain?: Grain | undefined }) {
       await workspaces.authorize(a.id, workspaceId, "analytics:read");

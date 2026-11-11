@@ -41,6 +41,9 @@ export interface PublishResult { externalId: string; url?: string; raw?: unknown
 /** One number as the platform reported it, under the platform's own name. Mapping to canonical keys happens in the analytics normalizer. */
 export interface RawMetric { originalName: string; value: number | null; availability: "available" | "unavailable"; period?: "lifetime" | "day" }
 export interface MetricsResult { metrics: RawMetric[]; raw: unknown; source: string }
+/** Audience distribution of an account (who follows / engages), as the platform reports it. */
+export interface AudienceRow { kind: "follower" | "engaged"; breakdown: "age" | "gender" | "city" | "country"; timeframe: string; values: Record<string, number> }
+export interface AudienceResult { rows: AudienceRow[]; /** e.g. "follower_demographics_age" -> platform error code (accounts under 100 followers get none) */ unavailable: Record<string, number | null> }
 export interface AnalyticsAccountRef { externalId: string; metadata: Record<string, unknown> }
 
 export interface PublicProfile { externalId: string; handle: string; displayName: string; avatarUrl?: string; followers: number | null; posts: number | null; extra?: Record<string, unknown>; uploadsPlaylistId?: string }
@@ -76,6 +79,8 @@ export interface SocialAdapter {
   /** Present only when the platform exposes metrics for a published post to this app. Metrics the platform did not return MUST be reported as `unavailable`, never as 0. */
   fetchPostMetrics?(i: { accessToken: string; account: AnalyticsAccountRef; externalPostId: string; publishedAt: Date }): Promise<MetricsResult>;
   fetchAccountMetrics?(i: { accessToken: string; account: AnalyticsAccountRef }): Promise<MetricsResult>;
+  /** Audience demographics (age/gender/city/country). Absent when the platform offers none to this app. */
+  fetchAudience?(i: { accessToken: string; account: AnalyticsAccountRef }): Promise<AudienceResult>;
 }
 
 const noOauth = () => { throw new PlatformError("permanent", "This platform connects with credentials, not OAuth"); };

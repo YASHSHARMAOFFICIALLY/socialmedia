@@ -56,6 +56,21 @@ export const analyticsRepository = {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [snapshotId, t.workspace_id, t.social_account_id, t.platform, t.scope, t.job_id, t.external_post_id, m.key, m.originalName, m.definition, m.value, m.availability, m.period, m.components ?? null]);
   },
+  upsertAudience: (q: Queryable, t: { workspace_id: string; social_account_id: string; platform: string }, r: { kind: string; breakdown: string; timeframe: string; values: Record<string, number> }) =>
+    q.query(`INSERT INTO analytics_audience (social_account_id, workspace_id, platform, kind, breakdown, timeframe, data) VALUES ($1,$2,$3,$4,$5,$6,$7)
+             ON CONFLICT (social_account_id, kind, breakdown) DO UPDATE SET timeframe = EXCLUDED.timeframe, data = EXCLUDED.data, collected_at = now()`,
+      [t.social_account_id, t.workspace_id, t.platform, r.kind, r.breakdown, r.timeframe, JSON.stringify(r.values)]),
+  audienceFresh: async (q: Queryable, accountId: string, maxAgeDays: number) =>
+    ((await q.query("SELECT 1 FROM analytics_audience WHERE social_account_id = $1 AND collected_at > now() - make_interval(days => $2)", [accountId, maxAgeDays])).rowCount ?? 0) > 0,
+  audience: (q: Queryable, workspaceId: string, accountId: string) =>
+    q.query<{ kind: string; breakdown: string; timeframe: string; data: Record<string, number>; collected_at: string }>("SELECT kind, breakdown, timeframe, data, collected_at FROM analytics_audience WHERE workspace_id = $1 AND social_account_id = $2 ORDER BY kind, breakdown", [workspaceId, accountId]),
+  /** Day-period account metrics: one value per account per UTC day (the latest collection that day), each covering the 24 hours before it was collected. */
+  activityRows: (q: Queryable, workspaceId: string, from: string, to: string, platform?: string, accountId?: string) =>
+    q.query<{ social_account_id: string; platform: string; metric_key: string; day: string; value: string | null }>(
+      `SELECT DISTINCT ON (social_account_id, metric_key, (collected_at AT TIME ZONE 'UTC')::date) social_account_id, platform, metric_key, (collected_at AT TIME ZONE 'UTC')::date::text AS day, value::text
+         FROM analytics_metrics WHERE workspace_id = $1 AND scope = 'account' AND period = 'day' AND (collected_at AT TIME ZONE 'UTC')::date BETWEEN $2::date AND $3::date
+          AND ($4::text IS NULL OR platform = $4) AND ($5::uuid IS NULL OR social_account_id = $5)
+        ORDER BY social_account_id, metric_key, (collected_at AT TIME ZONE 'UTC')::date, collected_at DESC, id DESC`, [workspaceId, from, to, platform ?? null, accountId ?? null]),
   bumpVersion: (q: Queryable, workspaceId: string) =>
     q.query("INSERT INTO analytics_versions (workspace_id, version) VALUES ($1, 1) ON CONFLICT (workspace_id) DO UPDATE SET version = analytics_versions.version + 1", [workspaceId]),
   version: async (q: Queryable, workspaceId: string) =>

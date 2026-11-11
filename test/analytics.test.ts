@@ -1,4 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
+import type { MetricsResult } from "../src/integrations/core/types.js";
 import { PlatformError } from "../src/integrations/core/errors.js";
 import { rebuildAggregates } from "../src/modules/analytics/analytics.aggregator.js";
 import { createFakeAdapter, metricsOf, ok } from "./helpers/fake-adapter.js";
@@ -187,6 +188,36 @@ describe("analytics pipeline", async () => {
     const month = (await analytics(owner, ws, `/trends?metric=likes&grain=month&from=${iso(40).slice(0, 10)}&to=${today()}`)).body.data;
     expect(month.grain).toBe("month");
     expect((await analytics(owner, ws, "/trends?metric=bogus")).status).toBe(400);
+  });
+
+  it("Instagram-style account insights: day-period metrics become a daily activity series (unavailable stays null), audience demographics are served and refreshed weekly", async () => {
+    let audienceCalls = 0;
+    const day = (reach: number | null): MetricsResult => ({ source: "fake://acct", raw: {}, metrics: [
+      { originalName: "followers_count", value: 500, availability: "available" },
+      { originalName: "reach", value: reach, availability: reach === null ? "unavailable" : "available", period: "day" },
+      { originalName: "accounts_engaged", value: 12, availability: "available", period: "day" }] });
+    const { t } = await mk([{ platform: "instagram", opts: { accountMetrics: () => day(300), audience: () => { audienceCalls++; return { rows: [{ kind: "follower", breakdown: "gender", timeframe: "this_month", values: { "F": 60, "M": 40 } }], unavailable: { engaged_audience_demographics_age: 400 } }; } } }]);
+    const { owner, ws, accounts } = await world(t, ["instagram"]);
+    await runCollection(t);
+    const acc = accounts.instagram!;
+    const act = (await analytics(owner, ws, `/activity?from=${iso(1).slice(0, 10)}&to=${today()}&accountId=${acc}`)).body.data;
+    const reach = act.series.find((s: { metric: string }) => s.metric === "reach");
+    expect(reach.points).toEqual([{ day: today(), value: 300 }]);
+    expect(act.series.find((s: { metric: string }) => s.metric === "accounts_engaged").points[0].value).toBe(12);
+    expect((await t.db.query("SELECT 1 FROM analytics_metrics WHERE scope = 'account' AND period = 'day' AND metric_key = 'reach'")).rowCount).toBe(1);
+    const aud = (await analytics(owner, ws, `/accounts/${acc}/audience`)).body.data;
+    expect(aud.follower.gender).toEqual({ F: 60, M: 40 });
+    expect(aud.engaged).toEqual({});
+    expect(audienceCalls).toBe(1);
+    await t.db.query("UPDATE analytics_targets SET next_collect_at = now() - interval '1 minute', enqueued_at = NULL, claim_token = NULL WHERE scope = 'account'");
+    await runCollection(t);
+    expect((await t.db.query("SELECT 1 FROM analytics_snapshots WHERE scope = 'account'")).rowCount).toBe(2);   // it really collected again
+    expect(audienceCalls).toBe(1);                                  // fresh for a week: not requested again
+    await t.db.query("UPDATE analytics_audience SET collected_at = now() - interval '8 days'"); await t.db.query("UPDATE analytics_targets SET next_collect_at = now() - interval '1 minute', enqueued_at = NULL, claim_token = NULL WHERE scope = 'account'");
+    await runCollection(t);
+    expect(audienceCalls).toBe(2);
+    const outsider = await t.newUser("out");
+    expect((await analytics(outsider, ws, `/accounts/${acc}/audience`)).status).toBe(404);
   });
 
   it("follower growth: level series per platform, carried forward, with baseline growth and an honest 'not de-duplicated' note", async () => {

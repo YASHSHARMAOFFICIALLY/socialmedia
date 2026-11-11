@@ -2,7 +2,7 @@ import { NO_CAPABILITIES, type MetricsResult, type PublicPost, type PublicProfil
 
 type Step = (call: number, input: PublishInput) => PublishResult | Promise<PublishResult>;
 /** Test double for a platform API. Scripted per call; records every call. Never used outside tests. */
-export function createFakeAdapter(platform: Platform, script: Step, o: { reconcile?: SocialAdapter["reconcile"]; postMetrics?: (call: number, externalPostId: string) => MetricsResult | Promise<MetricsResult>; accountMetrics?: (call: number) => MetricsResult | Promise<MetricsResult>; competitor?: { profile: (handle: string) => PublicProfile | Promise<PublicProfile>; posts: (profile: { externalId: string }) => PublicPost[] | Promise<PublicPost[]> } } = {}) {
+export function createFakeAdapter(platform: Platform, script: Step, o: { audience?: () => import("../../src/integrations/core/types.js").AudienceResult; reconcile?: SocialAdapter["reconcile"]; postMetrics?: (call: number, externalPostId: string) => MetricsResult | Promise<MetricsResult>; accountMetrics?: (call: number) => MetricsResult | Promise<MetricsResult>; competitor?: { profile: (handle: string) => PublicProfile | Promise<PublicProfile>; posts: (profile: { externalId: string }) => PublicPost[] | Promise<PublicPost[]> } } = {}) {
   const calls: PublishInput[] = [];
   const metricCalls = { post: 0, account: 0 };
   const adapter: SocialAdapter = {
@@ -14,6 +14,7 @@ export function createFakeAdapter(platform: Platform, script: Step, o: { reconci
     ...(o.reconcile ? { reconcile: o.reconcile } : {}),
     ...(o.competitor ? { lookupPublicProfile: async (i: { handle: string }) => o.competitor!.profile(i.handle), fetchPublicPosts: async (i: { profile: { externalId: string } }) => o.competitor!.posts(i.profile) } : {}),
     ...(o.postMetrics ? { fetchPostMetrics: async (i: { externalPostId: string }) => o.postMetrics!(++metricCalls.post, i.externalPostId) } : {}),
+    ...(o.audience ? { fetchAudience: async () => o.audience!() } : {}),
     ...(o.accountMetrics ? { fetchAccountMetrics: async () => o.accountMetrics!(++metricCalls.account) } : {}),
   };
   return { adapter, calls, metricCalls };

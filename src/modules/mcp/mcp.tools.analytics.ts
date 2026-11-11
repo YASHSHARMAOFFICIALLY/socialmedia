@@ -46,6 +46,18 @@ export const analyticsTools = [
     handler: async (c, a) => withFreshness(c, await c.deps.analytics.account(c.actor, c.workspaceId, a.accountId, drop({ from: a.from, to: a.to, grain: a.grain }))),
   }),
   defineTool({
+    name: "get_account_activity", title: "Daily account activity", scope: "analytics:read",
+    description: `Daily account-level activity (reach, views, accounts engaged, likes, comments, shares, saves, reposts, profile link taps) where the platform provides it. One point per account per day covering the 24 hours before collection; values are unique counts and are never summed across days or accounts. A missing day means nothing was collected; null means unavailable. ${FRESH}`,
+    input: z.object({ workspaceId, ...range, platform, accountId: z.uuid().optional() }),
+    handler: async (c, a) => withFreshness(c, await c.deps.analytics.activity(c.actor, c.workspaceId, drop({ from: a.from, to: a.to, platform: a.platform, accountId: a.accountId }))),
+  }),
+  defineTool({
+    name: "get_audience_demographics", title: "Audience demographics", scope: "analytics:read",
+    description: `Who follows and engages with one account, by age, gender, city and country, as the platform last reported it. Empty when the platform withholds it (Instagram needs 100+ followers). ${FRESH}`,
+    input: z.object({ workspaceId, accountId: z.uuid().describe("Social account id from list_social_accounts") }),
+    handler: async (c, a) => withFreshness(c, await c.deps.analytics.audience(c.actor, c.workspaceId, a.accountId)),
+  }),
+  defineTool({
     name: "get_post_analytics", title: "Post analytics", scope: "analytics:read",
     description: `Analytics for one post on each platform it was published to, with every metric's availability (available / unavailable), history, and state (unsupported / not_yet_collected / collected). ${FRESH}`,
     input: z.object({ workspaceId, postId: z.uuid(), grain }),

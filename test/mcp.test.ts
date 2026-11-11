@@ -36,12 +36,12 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
     return post;
   };
 
-  it("registers 17 tools, 6 resources and 4 prompts with read-only annotations", async () => {
+  it("registers 19 tools, 6 resources and 4 prompts with read-only annotations", async () => {
     const { owner } = await world(t, ["x"]);
     const c = await connect(principal(owner));
     const tools = (await c.listTools()).tools;
-    expect(tools.map((x) => x.name).sort()).toEqual(["compare_platform_performance", "create_billing_portal_session", "create_draft_post", "get_account_analytics", "get_analytics_overview", "get_available_plans", "get_current_plan", "get_engagement_trends", "get_follower_growth", "get_post", "get_post_analytics", "get_subscription", "get_top_posts", "get_usage_summary", "list_invoices", "list_recent_posts", "list_social_accounts"]);
-    expect(TOOLS.length).toBe(17);
+    expect(tools.map((x) => x.name).sort()).toEqual(["compare_platform_performance", "create_billing_portal_session", "create_draft_post", "get_account_activity", "get_account_analytics", "get_analytics_overview", "get_audience_demographics", "get_available_plans", "get_current_plan", "get_engagement_trends", "get_follower_growth", "get_post", "get_post_analytics", "get_subscription", "get_top_posts", "get_usage_summary", "list_invoices", "list_recent_posts", "list_social_accounts"]);
+    expect(TOOLS.length).toBe(19);
     for (const tool of tools) { expect(tool.description!.length, tool.name).toBeGreaterThan(40); expect(tool.annotations?.readOnlyHint, tool.name).toBe(!["create_billing_portal_session", "create_draft_post"].includes(tool.name)); }   // the portal tool mints a link and writes an audit row: not read-only
     expect((await c.listResources()).resources.map((r) => r.uri).sort()).toEqual(["analytics://metric-definitions", "analytics://overview", "analytics://top-posts", "billing://subscription", "billing://usage", "social://accounts"]);
     expect((await c.listPrompts()).prompts.map((p) => p.name).sort()).toEqual(["content-repurposing", "cross-platform-content-analysis", "subscription-usage-review", "weekly-performance-review"]);

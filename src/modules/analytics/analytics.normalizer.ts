@@ -38,6 +38,10 @@ export const MAPPINGS: Record<Platform, Record<string, Mapping>> = {
     profile_visits: m("profile_visits", "Instagram profile_visits attributed to the media"),
     ig_reels_avg_watch_time: m("avg_watch_time_seconds", "Instagram ig_reels_avg_watch_time (reported in milliseconds, stored in seconds)"),
     followers_count: m("followers", "Instagram followers_count"),
+    // Account insights (GET /<IG_ID>/insights, period=day, metric_type=total_value): the total for the 24 hours before collection.
+    saves: m("saves", "Instagram saves (account insights, last 24 hours)"),
+    accounts_engaged: m("accounts_engaged", "Instagram accounts_engaged (account insights, last 24 hours; Meta marks it as an estimate)"),
+    profile_links_taps: m("profile_links_taps", "Instagram profile_links_taps (account insights, last 24 hours)"),
   },
   threads: {
     views: m("views", "Threads views: times the post was played or displayed (metric in development per Meta)"),

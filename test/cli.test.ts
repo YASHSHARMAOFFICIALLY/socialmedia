@@ -112,7 +112,7 @@ describe("CLI: bridge to the real server", async () => {
     const c = new Client({ name: "host", version: "1" }, { versionNegotiation: { mode: "auto" } });
     await c.connect(transport);
     (transport as any).stderr?.on?.("data", (d: Buffer) => { err += d.toString(); });
-    expect((await c.listTools()).tools.length).toBe(17);
+    expect((await c.listTools()).tools.length).toBe(19);
     expect(((await c.callTool({ name: "get_available_plans", arguments: {} })).structuredContent as any).plans).toHaveLength(4);
     await c.close();
     expect(err).not.toContain(token);                                                    // secrets never in logs
