@@ -11,7 +11,7 @@ const emails = (t: T) => t.db.query<{ attempts: number; dispatched_at: string | 
 describe("notifications", async () => {
   let failMode: "ok" | "fail" = "ok";
   const sentMail: { to: string; subject: string; html: string }[] = [];
-  const mailer: Mailer = { send: async (m) => { if (failMode === "fail") throw new Error("smtp down"); sentMail.push(m); } };
+  const mailer: Mailer = { send: async (m) => { if (/^Verify your email/.test(m.subject)) return; if (failMode === "fail") throw new Error("smtp down"); sentMail.push(m); } };   // sign-up verification mails are not what these tests count
   let result: "ok" | "fail" | "perm" = "ok";
   const li = createFakeAdapter("linkedin", () => { if (result === "fail") throw new PlatformError("permanent", "Rejected <b>by</b> LinkedIn"); return ok(); });
   const t = await createTestApp([li.adapter], { mailer });
