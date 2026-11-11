@@ -53,7 +53,25 @@ export function createXPublisher(f: typeof fetch = fetch, o: { pollMs?: number }
     const id = ((await res.json().catch(() => null)) as { data?: { id?: string } } | null)?.data?.id;
     if (!id) throw new PlatformError("unknown", "x accepted the post but returned no id");
     const handle = i.account.metadata.username as string | undefined;
-    return { externalId: id, url: `https://x.com/${handle ?? "i/web"}/status/${id}`, raw: { id } } satisfies PublishResult;
+    // Thread: each further tweet replies to the previous. The first tweet is already public, so a failure here must NOT fail (and later
+    // re-publish) the post: report success with a warning naming what was not posted.
+    const rest = Array.isArray(i.content.metadata.thread) ? (i.content.metadata.thread as string[]) : [];
+    const ids_: string[] = [id], warnings: string[] = [];
+    for (let n = 0; n < rest.length; n++) {
+      try {
+        const r = await platformFetch(f, "x", `${API}/tweets`, {
+          method: "POST", signal: i.signal, headers: { Authorization: `Bearer ${i.accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ text: rest[n], reply: { in_reply_to_tweet_id: ids_[ids_.length - 1] } }),
+        }, { creates: true });
+        const rid = ((await r.json().catch(() => null)) as { data?: { id?: string } } | null)?.data?.id;
+        if (!rid) throw new Error("no id returned");
+        ids_.push(rid);
+      } catch (e) {
+        warnings.push(`Thread stopped after tweet ${ids_.length} of ${rest.length + 1}: ${e instanceof Error ? e.message.slice(0, 120) : "error"}. The remaining ${rest.length - n} tweet(s) were NOT posted.`);
+        break;
+      }
+    }
+    return { externalId: id, url: `https://x.com/${handle ?? "i/web"}/status/${id}`, raw: { id, thread: ids_ }, ...(warnings.length ? { warnings } : {}) } satisfies PublishResult;
   };
 }
 

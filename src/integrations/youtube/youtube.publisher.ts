@@ -41,7 +41,7 @@ export function createYouTubePublisher(f: typeof fetch = fetch, o: { maxResumes?
   return async function publish(i: PublishInput): Promise<PublishResult> {
     const video = i.media.find((m) => m.role === "media" && m.kind === "video");
     if (!video) throw new PlatformError("permanent", "YouTube requires a video");
-    const meta = i.content.metadata as { privacyStatus?: string; categoryId?: string; madeForKids?: boolean };
+    const meta = i.content.metadata as { privacyStatus?: string; categoryId?: string; madeForKids?: boolean; publishAt?: string };
     const thumb = i.media.find((m) => m.role === "thumbnail");
     const auth = { Authorization: `Bearer ${i.accessToken}` };
 
@@ -51,7 +51,7 @@ export function createYouTubePublisher(f: typeof fetch = fetch, o: { maxResumes?
       headers: { ...auth, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Length": String(video.sizeBytes), "X-Upload-Content-Type": video.mimeType },
       body: JSON.stringify({
         snippet: { title: i.content.title, description: i.content.description ?? i.content.text, tags: i.content.hashtags, ...(meta.categoryId ? { categoryId: meta.categoryId } : {}) },
-        status: { privacyStatus: meta.privacyStatus ?? "public", ...(typeof meta.madeForKids === "boolean" ? { selfDeclaredMadeForKids: meta.madeForKids } : {}) },
+        status: { privacyStatus: meta.publishAt ? "private" : meta.privacyStatus ?? "public", ...(meta.publishAt ? { publishAt: new Date(meta.publishAt).toISOString() } : {}), ...(typeof meta.madeForKids === "boolean" ? { selfDeclaredMadeForKids: meta.madeForKids } : {}) },
       }),
     }).catch((e) => { throw new PlatformError("retryable", `youtube init failed: ${(e as Error).message}`); });
     if (!initRes.ok) throw await toYouTubeError(initRes, false);

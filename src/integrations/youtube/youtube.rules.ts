@@ -8,6 +8,13 @@ export const youtubeRules: ContentRules = {
     const issues: Issue[] = [];
     const desc = c.description ?? c.text;
     const videos = mediaOnly(c).filter((m) => m.kind === "video");
+    // YouTube's own release timer: the video is uploaded private and YouTube makes it public at publishAt (requires privacyStatus private).
+    const at = c.metadata.publishAt;
+    if (at !== undefined) {
+      if (typeof at !== "string" || Number.isNaN(Date.parse(at))) issues.push({ code: "PUBLISH_AT_INVALID", field: "metadata", severity: "error", message: "metadata.publishAt must be an ISO 8601 date-time" });
+      else if (Date.parse(at) <= Date.now()) issues.push({ code: "PUBLISH_AT_PAST", field: "metadata", severity: "error", message: "metadata.publishAt must be in the future" });
+      if (c.metadata.privacyStatus !== undefined && c.metadata.privacyStatus !== "private") issues.push({ code: "PUBLISH_AT_PRIVACY", field: "metadata", severity: "error", message: "publishAt only works with privacyStatus 'private' (YouTube makes it public at that time)" });
+    }
     if (videos.length !== 1 || mediaOnly(c).length !== 1) issues.push({ code: "VIDEO_REQUIRED", field: "media", severity: "error", message: "YouTube requires exactly one video file" });
     if (!c.title?.trim()) issues.push({ code: "TITLE_REQUIRED", field: "title", severity: "error", message: "YouTube requires a title" });
     else if (chars(c.title) > 100) issues.push({ code: "TITLE_TOO_LONG", field: "title", severity: "error", message: `Title is ${chars(c.title)} characters; max 100` });

@@ -16,6 +16,12 @@ export const xRules: ContentRules = {
     if (!text && mediaOnly(c).length === 0) issues.push({ code: "EMPTY", field: "caption", severity: "error", message: "Post needs text or media" });
     if (!long && n > 280) issues.push({ code: "TEXT_TOO_LONG", field: "caption", severity: "error", message: `Text is ${n} characters (approximate); standard accounts allow 280. Set metadata.longPost=true only for Premium accounts` });
     if (long && n > 25000) issues.push({ code: "TEXT_TOO_LONG", field: "caption", severity: "warning", message: `Text is ${n} characters; the Premium limit (25,000) is not confirmed by official docs` });
+    // Thread: metadata.thread = further tweets, each a reply to the previous one. Text only (media belongs to the first tweet).
+    if (c.metadata.thread !== undefined) {
+      const t = c.metadata.thread;
+      if (!Array.isArray(t) || t.length === 0 || t.length > 24 || t.some((x) => typeof x !== "string" || !x.trim())) issues.push({ code: "THREAD_INVALID", field: "metadata", severity: "error", message: "metadata.thread must be 1 to 24 non-empty strings" });
+      else t.forEach((x, i) => { if (!long && weighted(x as string) > 280) issues.push({ code: "TEXT_TOO_LONG", field: "metadata", severity: "error", message: `Thread tweet ${i + 2} is ${weighted(x as string)} characters (approximate); the limit is 280` }); });
+    }
     const media = mediaOnly(c);
     const videos = media.filter((m) => m.kind === "video"), images = media.filter((m) => m.kind === "image");
     const gifs = images.filter((m) => m.mimeType === "image/gif");

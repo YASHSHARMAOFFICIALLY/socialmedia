@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { xRules } from "../../src/integrations/x/x.rules.js";
 import { createXAdapter } from "../../src/integrations/x/x.adapter.js";
+import { youtubeRules } from "../../src/integrations/youtube/youtube.rules.js";
 import { createYouTubeAdapter } from "../../src/integrations/youtube/youtube.adapter.js";
 import { createInstagramAdapter } from "../../src/integrations/instagram/instagram.adapter.js";
 import type { ContentInput } from "../../src/integrations/core/rules.js";
@@ -77,6 +79,29 @@ describe("X adapter (mocked API)", () => {
     expect(hit).toEqual({ externalId: "9" });
     expect(await ad(harness(() => Response.json({ data: [] })).f).reconcile!({ accessToken: "T", account: { externalId: "u1", metadata: {} }, content: content(), idempotencyKey: "k", since: new Date() })).toBeNull();
   });
+  it("threads: each further tweet replies to the previous; a mid-thread failure keeps the post successful with a warning (never re-published)", async () => {
+    let n = 0;
+    const h = harness((c) => (c.url.endsWith("/tweets") ? Response.json({ data: { id: `T${++n}` } }, { status: 201 }) : Response.json({})));
+    const r = await ad(h.f).publish!(input(content({ metadata: { thread: ["two", "three"] } })));
+    expect(r.externalId).toBe("T1");
+    expect(h.calls.map((c) => (c.body as { reply?: { in_reply_to_tweet_id: string } }).reply?.in_reply_to_tweet_id)).toEqual([undefined, "T1", "T2"]);
+    expect(r.raw).toMatchObject({ thread: ["T1", "T2", "T3"] });
+    let k = 0;
+    const h2 = harness((c) => (++k === 2 ? new Response("x", { status: 500 }) : Response.json({ data: { id: `A${k}` } }, { status: 201 })));
+    const r2 = await ad(h2.f).publish!(input(content({ metadata: { thread: ["two", "three"] } })));
+    expect(r2.externalId).toBe("A1");
+    expect(r2.warnings?.[0]).toMatch(/NOT posted/);
+  });
+
+  it("thread rules: 1-24 non-empty tweets of at most 280 characters", () => {
+    const rules = xRules;
+    const codes = (thread: unknown) => rules.validate(content({ metadata: { thread } })).map((x) => x.code);
+    expect(codes(["fine"])).toEqual([]);
+    expect(codes([])).toContain("THREAD_INVALID");
+    expect(codes(["ok", " "])).toContain("THREAD_INVALID");
+    expect(codes("nope")).toContain("THREAD_INVALID");
+    expect(codes(["x".repeat(281)])).toContain("TEXT_TOO_LONG");
+  });
 });
 
 describe("YouTube adapter (mocked API)", () => {
@@ -150,6 +175,17 @@ describe("YouTube adapter (mocked API)", () => {
     const acc = { externalId: "UC1", metadata: { uploadsPlaylistId: "UU1" } };
     expect(await ad(h.f).reconcile!({ accessToken: "T", account: acc, content: content({ title: "Mine" }), idempotencyKey: "k", since: new Date(Date.now() - 60_000) })).toMatchObject({ externalId: "V9" });
     expect(await ad(h.f).reconcile!({ accessToken: "T", account: acc, content: content({ title: "Absent" }), idempotencyKey: "k", since: new Date(0) })).toBeNull();
+  });
+  it("publishAt: uploaded private with status.publishAt; rules reject past dates, bad dates and non-private privacy", async () => {
+    const at = new Date(Date.now() + 86_400_000).toISOString();
+    const h = harness((c) => (c.url.includes("uploadType=resumable") ? new Response("", { status: 200, headers: { location: "https://up.example/s" } }) : Response.json({ id: "V1" })));
+    await createYouTubeAdapter({ clientId: "c", clientSecret: "s" }, h.f).publish!(input(content({ title: "t", metadata: { publishAt: at, privacyStatus: "public" } }), [mk("video", 10)])).catch(() => null);
+    expect((h.calls[0]!.body as { status: Record<string, unknown> }).status).toMatchObject({ privacyStatus: "private", publishAt: at });
+    const codes = (m: Record<string, unknown>) => youtubeRules.validate(content({ title: "t", media: [{ kind: "video", role: "media", mimeType: "video/mp4", sizeBytes: 10 } as never], metadata: m })).map((x) => x.code);
+    expect(codes({ publishAt: at })).not.toContain("PUBLISH_AT_PAST");
+    expect(codes({ publishAt: "2020-01-01T00:00:00Z" })).toContain("PUBLISH_AT_PAST");
+    expect(codes({ publishAt: "soon" })).toContain("PUBLISH_AT_INVALID");
+    expect(codes({ publishAt: at, privacyStatus: "public" })).toContain("PUBLISH_AT_PRIVACY");
   });
 });
 
