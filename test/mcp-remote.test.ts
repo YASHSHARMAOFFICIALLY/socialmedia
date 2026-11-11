@@ -1,4 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
+import { createHash } from "node:crypto";
 import request from "supertest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createFakeAdapter, ok } from "./helpers/fake-adapter.js";
@@ -130,6 +131,77 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     expect((await rpc(r2.access_token)).status).toBe(401);                                             // whole grant is dead
     expect((await refresh(r2.refresh_token)).status).toBe(400);
     expect((await t.db.query("SELECT 1 FROM audit_logs WHERE action = 'mcp.grant.reuse_detected'")).rowCount).toBe(1);
+  });
+
+  describe("browser OAuth: authorization code + PKCE + dynamic client registration", () => {
+    const verifier = "v".repeat(60), challenge = createHash("sha256").update(verifier).digest("base64url");
+    const REDIRECT = "https://claude.example/api/mcp/auth_callback";
+    const register = (body: object = { client_name: "Claude", redirect_uris: [REDIRECT] }) => request(t.app).post("/mcp/register").send(body);
+    const q = (clientId: string, extra: Record<string, string> = {}) => new URLSearchParams({ client_id: clientId, redirect_uri: REDIRECT, response_type: "code", code_challenge: challenge, code_challenge_method: "S256", state: "xyz", ...extra });
+    const approve = (u: { agent: any }, clientId: string, ws: string, decision = "approve", extra: Record<string, string> = {}) =>
+      u.agent.post("/mcp/authorize").type("form").send({ ...Object.fromEntries(q(clientId, extra)), workspace_id: ws, decision });
+    const codeFrom = (html: string) => new URL(/href="([^"]+)"/.exec(html)![1]!.replace(/&amp;/g, "&").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))));
+    const exchange = (code: string, clientId: string, v = verifier, redirect = REDIRECT) => request(t.app).post("/mcp/token").type("form").send({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: redirect, code_verifier: v });
+
+    it("metadata advertises the flow; registration accepts safe redirect URIs only", async () => {
+      const md = (await request(t.app).get("/.well-known/oauth-authorization-server")).body;
+      expect(md).toMatchObject({ code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"] });
+      expect(md.registration_endpoint).toMatch(/\/mcp\/register$/);
+      expect((await request(t.app).get("/.well-known/oauth-protected-resource/mcp")).body.authorization_servers).toHaveLength(1);
+      const ok = await register();
+      expect(ok.status).toBe(201);
+      expect(ok.body.client_id).toMatch(/^dsc_/);
+      for (const bad of ["javascript:alert(1)", "http://evil.test/cb", "file:///etc/passwd", "https://u:p@x.test/cb", "https://x.test/cb#f", "notaurl"]) expect((await register({ client_name: "x", redirect_uris: [bad] })).status, bad).toBe(400);
+      expect((await register({ client_name: "Local", redirect_uris: ["http://127.0.0.1:8123/cb", "cursor://anysphere.cursor/mcp"] })).status).toBe(201);
+    });
+
+    it("full flow: consent -> code -> token (PKCE) -> /mcp works -> refresh rotates; code is single-use", async () => {
+      const { owner, ws } = await world(t, ["x"]);
+      await upgrade(ws);
+      const { client_id } = (await register()).body;
+      const page = await owner.agent.get(`/mcp/authorize?${q(client_id)}`);
+      expect(page.status).toBe(200);
+      expect(page.text).toContain("Claude");
+      expect((await request(t.app).get(`/mcp/authorize?${q(client_id)}`)).status).toBe(401);                 // needs a signed-in browser
+      const done = await approve(owner, client_id, ws);
+      expect(done.status).toBe(200);
+      const back = codeFrom(done.text);
+      expect(back.origin + back.pathname).toBe(REDIRECT);
+      expect(back.searchParams.get("state")).toBe("xyz");
+      const code = back.searchParams.get("code")!;
+      expect((await exchange(code, client_id, "w".repeat(60))).status).toBe(400);                            // wrong verifier burns the code
+      expect((await exchange(code, client_id)).status).toBe(400);
+      const code2 = codeFrom((await approve(owner, client_id, ws)).text).searchParams.get("code")!;
+      expect((await exchange(code2, client_id, verifier, "https://claude.example/other")).status).toBe(400);   // redirect_uri must match
+      const code3 = codeFrom((await approve(owner, client_id, ws)).text).searchParams.get("code")!;
+      const tok = await exchange(code3, client_id);
+      expect(tok.status).toBe(200);
+      expect(tok.body).toMatchObject({ token_type: "Bearer", workspace_id: ws });
+      expect(tok.body.scope).not.toContain("billing:portal");                                                 // least privilege by default
+      expect((await rpc(tok.body.access_token)).status).toBe(200);
+      expect((await exchange(code3, client_id)).status).toBe(400);                                            // replay
+      const r1 = await request(t.app).post("/mcp/token").type("form").send({ grant_type: "refresh_token", refresh_token: tok.body.refresh_token });
+      expect(r1.status).toBe(200);
+      expect((await t.db.query("SELECT 1 FROM mcp_grants WHERE kind = 'oauth'")).rowCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it("rejects unknown clients, unregistered redirects, missing PKCE, non-admins, cross-site posts; deny returns access_denied", async () => {
+      const { owner, ws } = await world(t, ["x"]);
+      const { client_id } = (await register()).body;
+      expect((await owner.agent.get(`/mcp/authorize?${q("dsc_unknown")}`)).status).toBe(400);
+      expect((await owner.agent.get(`/mcp/authorize?${q(client_id, { redirect_uri: "https://evil.test/cb" })}`)).status).toBe(400);
+      expect((await owner.agent.get(`/mcp/authorize?${q(client_id, { code_challenge_method: "plain" })}`)).status).toBe(400);
+      const noPkce = q(client_id); noPkce.delete("code_challenge");
+      expect((await owner.agent.get(`/mcp/authorize?${noPkce}`)).status).toBe(400);
+      const viewer = await t.newUser("vw2");
+      await t.db.query("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,'viewer')", [ws, viewer.id]);
+      expect((await approve(viewer, client_id, ws)).status).toBe(403);
+      const cross = await owner.agent.post("/mcp/authorize").set("origin", "https://evil.test").type("form").send({ ...Object.fromEntries(q(client_id)), workspace_id: ws, decision: "approve" });
+      expect(cross.status).toBe(403);
+      const denied = codeFrom((await approve(owner, client_id, ws, "deny")).text);
+      expect(denied.searchParams.get("error")).toBe("access_denied");
+      expect(denied.searchParams.get("code")).toBeNull();
+    });
   });
 
   it("device flow: deny, expiry, unknown scope and unknown codes", async () => {

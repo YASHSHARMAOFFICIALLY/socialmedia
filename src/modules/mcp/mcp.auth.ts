@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { Db } from "../../infrastructure/database/db.js";
 import { AppError, badRequest, notFound } from "../../shared/errors/errors.js";
 import { auditRepository } from "../audit/audit.repository.js";
@@ -23,9 +23,27 @@ const normalizeScopes = (scopes: readonly string[]) => {
   if (bad.length) throw badRequest(`Unknown scope: ${bad[0]}`);
   return [...new Set(scopes)];
 };
+const AUTH_CODE_TTL_S = 60;
+const FORBIDDEN_SCHEMES = new Set(["javascript:", "data:", "file:", "vbscript:", "about:", "blob:", "http:", "ws:", "wss:", "ftp:"]);
+/** https, loopback http (RFC 8252), or a private-use scheme for native apps. Never a scheme that executes or reads local content. */
+export function validRedirectUri(raw: string): boolean {
+  if (raw.length > 500) return false;
+  let u: URL;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.hash) return false;
+  if (u.protocol === "https:") return !u.username && !u.password;
+  if (u.protocol === "http:") return ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+  return !FORBIDDEN_SCHEMES.has(u.protocol) && /^[a-z][a-z0-9+.-]*:\/\//.test(raw);
+}
+const pkceOk = (verifier: string, challenge: string) => {
+  const a = Buffer.from(createHash("sha256").update(verifier).digest("base64url")), b = Buffer.from(challenge);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
 export class OAuthError extends AppError {
   constructor(public readonly oauth: string, description: string, status = 400) { super(status, oauth.toUpperCase(), description); }
 }
+
+export interface AuthorizeQuery { client_id?: string | undefined; redirect_uri?: string | undefined; response_type?: string | undefined; code_challenge?: string | undefined; code_challenge_method?: string | undefined; scope?: string | undefined }
 
 export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
   const { db, workspaces } = deps;
@@ -37,6 +55,18 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
     await q.query("INSERT INTO mcp_access_tokens (token_hash, grant_id, expires_at) VALUES ($1,$2, now() + make_interval(secs => $3))", [sha256(token), grantId, ttlS]);
     return token;
   }
+
+  /** Validates an authorization request. Errors about the client/redirect are never redirected (RFC 6749 4.1.2.1): they are shown to the user. */
+  async function authorizeRequest(q: AuthorizeQuery) {
+      const c = q.client_id ? (await db.query<{ name: string; redirect_uris: string[] }>("SELECT name, redirect_uris FROM mcp_clients WHERE client_id = $1", [q.client_id])).rows[0] : undefined;
+      if (!c) throw badRequest("Unknown client");
+      if (!q.redirect_uri || !c.redirect_uris.includes(q.redirect_uri)) throw badRequest("redirect_uri is not registered for this client");
+      if (q.response_type !== "code") throw badRequest("response_type must be code");
+      if (!q.code_challenge || q.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(q.code_challenge)) throw badRequest("PKCE with code_challenge_method=S256 is required");
+      const requested = (q.scope ?? "").split(" ").filter(Boolean);
+      const scopes = normalizeScopes(requested.length ? requested : SCOPES.filter((x) => x !== "billing:portal"));
+      return { clientName: c.name, redirectUri: q.redirect_uri, codeChallenge: q.code_challenge, scopes };
+    }
 
   return {
     /** Validate a bearer token. Returns null for anything unknown, expired or revoked (callers answer 401 without saying which). */
@@ -144,7 +174,50 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
       throw new OAuthError("invalid_grant", out.err === "reuse" ? "Refresh token reuse detected; the session was revoked" : out.err === "stale" ? "Refresh token was just rotated by another client; use the newest one" : "Invalid refresh token");
     },
 
+    // ---- Browser OAuth (authorization code + PKCE) with dynamic client registration (RFC 7591)
+    async registerClient(i: { clientName: string; redirectUris: string[] }) {
+      if (!i.redirectUris.length || i.redirectUris.length > 5 || !i.redirectUris.every(validRedirectUri)) throw new OAuthError("invalid_redirect_uri", "redirect_uris must be https, loopback http, or an app scheme (1 to 5)");
+      const clientId = secret("dsc");
+      const name = (i.clientName.trim() || "MCP client").slice(0, 80);
+      await db.query("INSERT INTO mcp_clients (client_id, name, redirect_uris) VALUES ($1,$2,$3)", [clientId, name, i.redirectUris]);
+      return { client_id: clientId, client_name: name, redirect_uris: i.redirectUris, token_endpoint_auth_method: "none", grant_types: ["authorization_code", "refresh_token"], response_types: ["code"] };
+    },
+    authorizeRequest,
+    /** Returns where to send the browser: back to the client with a code (approve) or access_denied. */
+    async authorizeDecide(a: Actor, q: AuthorizeQuery, state: string | undefined, workspaceId: string, approve: boolean) {
+      const req = await authorizeRequest(q);
+      await workspaces.authorize(a.id, workspaceId, "mcp:manage");                    // same bar as PATs and the device flow
+      const url = new URL(req.redirectUri);
+      if (state) url.searchParams.set("state", state.slice(0, 500));
+      if (!approve) { url.searchParams.set("error", "access_denied"); return url.toString(); }
+      const code = secret("dsx");
+      await db.query("INSERT INTO mcp_auth_codes (code_hash, client_id, user_id, workspace_id, scopes, redirect_uri, code_challenge, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7, now() + make_interval(secs => $8))",
+        [sha256(code), q.client_id, a.id, workspaceId, req.scopes, req.redirectUri, req.codeChallenge, AUTH_CODE_TTL_S]);
+      await auditRepository.record(db, { workspaceId, actorId: a.id, action: "mcp.oauth.approved", entityType: "mcp_client", metadata: { client: req.clientName, scopes: req.scopes }, ...(a.requestId ? { requestId: a.requestId } : {}) });
+      url.searchParams.set("code", code);
+      return url.toString();
+    },
+    async exchangeCode(i: { code: string; clientId: string; redirectUri: string; codeVerifier: string }) {
+      if (!/^[A-Za-z0-9._~-]{43,128}$/.test(i.codeVerifier)) throw new OAuthError("invalid_grant", "Invalid code_verifier");
+      const out = await db.tx(async (q): Promise<{ err: string } | { ok: Record<string, unknown> }> => {
+        const c = (await q.query<{ client_id: string; user_id: string; workspace_id: string; scopes: string[]; redirect_uri: string; code_challenge: string; used: boolean; expired: boolean; name: string }>(
+          "SELECT c.client_id, c.user_id, c.workspace_id, c.scopes, c.redirect_uri, c.code_challenge, c.used_at IS NOT NULL AS used, c.expires_at <= now() AS expired, k.name FROM mcp_auth_codes c JOIN mcp_clients k ON k.client_id = c.client_id WHERE c.code_hash = $1 FOR UPDATE OF c", [sha256(i.code)])).rows[0];
+        if (!c) return { err: "Unknown code" };
+        await q.query("UPDATE mcp_auth_codes SET used_at = COALESCE(used_at, now()) WHERE code_hash = $1", [sha256(i.code)]);   // single use, even when validation fails
+        if (c.used || c.expired || c.client_id !== i.clientId || c.redirect_uri !== i.redirectUri || !pkceOk(i.codeVerifier, c.code_challenge)) return { err: "Invalid, expired or already used code" };
+        const refresh = secret("dsr");
+        const g = (await q.query<{ id: string }>("INSERT INTO mcp_grants (user_id, workspace_id, kind, name, scopes, refresh_hash, expires_at) VALUES ($1,$2,'oauth',$3,$4,$5, now() + make_interval(secs => $6)) RETURNING id", [c.user_id, c.workspace_id, c.name, c.scopes, sha256(refresh), DEVICE_GRANT_TTL_S])).rows[0]!;
+        const access = await mintAccess(q, g.id, ACCESS_TTL_S);
+        await auditRepository.record(q, { workspaceId: c.workspace_id, actorId: c.user_id, action: "mcp.grant.created", entityType: "mcp_grant", entityId: g.id, metadata: { kind: "oauth", scopes: c.scopes } });
+        return { ok: { access_token: access, refresh_token: refresh, token_type: "Bearer", expires_in: ACCESS_TTL_S, scope: c.scopes.join(" "), workspace_id: c.workspace_id } };
+      });
+      if ("err" in out) throw new OAuthError("invalid_grant", out.err);
+      return out.ok;
+    },
+
     async purge() {
+      await db.query("DELETE FROM mcp_auth_codes WHERE expires_at < now() - interval '1 day'");
+      await db.query("DELETE FROM mcp_clients k WHERE k.created_at < now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM mcp_grants g WHERE g.name = k.name AND g.kind = 'oauth' AND g.created_at > now() - interval '30 days')");
       await db.query("DELETE FROM mcp_access_tokens WHERE expires_at < now() - interval '1 day'");
       await db.query("DELETE FROM mcp_device_codes WHERE expires_at < now() - interval '1 day'");
       await db.query("DELETE FROM mcp_grants WHERE (expires_at < now() - interval '30 days') OR (revoked_at < now() - interval '30 days')");

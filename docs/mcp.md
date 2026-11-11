@@ -13,12 +13,13 @@ Every tool, resource and prompt runs this gate, in order: **token scope → work
 - Errors come back as tool results with `isError` and `{error:{code,message,details}}`.
 
 ### Credentials
-There is **no browser OAuth authorization-code flow** (it needs a login/consent UI; this backend has none). Instead:
+Three ways to authenticate:
 1. **Personal access token** (`dsp_…`): `POST /workspaces/{ws}/mcp/tokens {name, scopes, expiresInDays≤90}` (owner/admin). Shown once; stored as SHA-256. For clients that accept a static header.
 2. **Device authorization (RFC 8628)** for the CLI: `POST /mcp/device` → user opens `/mcp/device?user_code=…` while signed in (plain HTML page), picks a workspace, approves → `POST /mcp/token` (device_code grant) returns a 1-hour access token (`dsa_…`) and a rotating 30-day refresh token (`dsr_…`). Reusing an already-rotated refresh token revokes the whole grant.
+3. **Browser OAuth 2.1** (authorization code + PKCE S256, dynamic client registration RFC 7591, metadata RFC 8414/9728) for hosts such as Claude and Cursor: the client registers at `POST /mcp/register`, sends the user to `GET /mcp/authorize` (server-rendered consent page; needs the user's signed-in cookie in that browser and an owner/admin workspace), the user picks a workspace and allows, the client gets a single-use 60 s code on its registered `redirect_uri` and trades it at `POST /mcp/token` (`authorization_code`) for the same access/refresh tokens as the device flow. Redirect URIs are matched exactly (https, loopback http, or an app scheme); default scopes exclude `billing:portal`. The consent POST refuses cross-site origins. If the browser is not signed in, `/mcp/authorize` answers 401: sign in to the app, then retry (a login redirect needs the frontend's URL).
 Revoke: `DELETE /workspaces/{ws}/mcp/tokens/{id}` (kills all its tokens). Scopes: `accounts:read analytics:read content:read billing:read billing:portal`.
 
-Gap vs. full MCP OAuth 2.1: clients that only speak the authorization-code + dynamic-registration flow cannot connect natively; use a PAT in the client's header config, or the CLI. Better Auth's `@better-auth/mcp` plugin could add that flow later but needs a login + consent page and its own tables (see "Decisions").
+Better Auth's `@better-auth/mcp` plugin was not used (it needs its own tables and a login UI); this flow is hand-built on the same grants as the device flow.
 
 ## Contracts (all read-only, annotated `readOnlyHint`)
 Analytics: `list_social_accounts`, `get_analytics_overview`, `get_account_analytics`, `get_post_analytics`, `get_top_posts`, `compare_platform_performance`, `get_follower_growth`, `get_engagement_trends`, `list_recent_posts`. Results carry `freshness` (last collection per platform). `null` metric = unavailable, never zero; non-comparable metrics are never summed; ranges max 366 days.
