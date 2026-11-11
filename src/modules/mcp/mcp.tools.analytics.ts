@@ -3,7 +3,7 @@ import { PLATFORMS } from "../../integrations/core/types.js";
 import { defineTool, type ToolCtx } from "./mcp.types.js";
 
 const workspaceId = z.uuid().optional().describe("Workspace ID. Optional when you belong to exactly one workspace or your connection is bound to one.");
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("UTC date YYYY-MM-DD");
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((v) => { const d = new Date(`${v}T00:00:00Z`); return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v); }, "Not a real calendar date").describe("UTC date YYYY-MM-DD");
 const range = { from: date.optional().describe("Start date (default: 30 days ago). Max range 366 days."), to: date.optional().describe("End date, inclusive (default: today)") };
 const platform = z.enum(PLATFORMS).optional();
 const grain = z.enum(["day", "week", "month"]).optional();

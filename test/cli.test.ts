@@ -47,6 +47,20 @@ describe("CLI: login, refresh, storage", () => {
     expect(store.load()).toBeNull();
   });
 
+  it("refresh adopts tokens another process already rotated, and a 429/5xx never wipes the stored login", async () => {
+    store.save({ apiUrl: "https://api.test", accessToken: "A2", refreshToken: "R2", expiresAt: Date.now() + 3_600_000 });
+    let calls = 0;
+    const stale = { apiUrl: "https://api.test", accessToken: "A1", refreshToken: "R1", expiresAt: 1 };
+    const got = await refresh(stale, (async () => { calls++; return json(400, { error: "invalid_grant" }); }) as never);
+    expect(got.refreshToken).toBe("R2");
+    expect(calls).toBe(0);                                             // used the newer tokens, never replayed the dead one
+    store.save({ apiUrl: "https://api.test", accessToken: "A1", refreshToken: "R1", expiresAt: 1 });
+    await expect(refresh(store.load()!, (async () => json(429, { error: "rate_limited" })) as never)).rejects.toThrow(/try again/);
+    expect(store.load()?.refreshToken).toBe("R1");
+    await expect(refresh(store.load()!, (async () => json(503, {})) as never)).rejects.toThrow(/try again/);
+    expect(store.load()?.refreshToken).toBe("R1");
+  });
+
   it("authedFetch refreshes shortly before expiry and sends the current bearer token", async () => {
     store.save({ apiUrl: "https://api.test", accessToken: "OLD", refreshToken: "R1", expiresAt: Date.now() + 10_000 });
     const seen: string[] = [];

@@ -18,6 +18,8 @@ export interface ToolDef<S extends z.ZodObject = z.ZodObject> {
   input: S;
   /** false for tools that must work on any plan (none today). Everything else requires the plan's mcp_access entitlement. */
   gated?: boolean;
+  /** false for a tool with side effects (e.g. mints a link, writes an audit row): clients then keep their confirmation prompt. Default true. */
+  readOnly?: boolean;
   handler(c: ToolCtx, args: z.infer<S>): Promise<unknown>;
 }
 export const defineTool = <S extends z.ZodObject>(t: ToolDef<S>) => t as unknown as ToolDef;

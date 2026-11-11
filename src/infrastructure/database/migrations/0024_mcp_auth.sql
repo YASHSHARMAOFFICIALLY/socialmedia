@@ -8,7 +8,8 @@ CREATE TABLE mcp_grants (
   name              text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
   scopes            text[] NOT NULL CHECK (cardinality(scopes) > 0),
   refresh_hash      text UNIQUE,                 -- device grants only: current refresh token
-  prev_refresh_hash text UNIQUE,                 -- previous one: presenting it again means theft, and the whole grant is revoked
+  old_refresh_hashes text[] NOT NULL DEFAULT '{}',   -- rotated-out tokens (newest last, capped): presenting one later means theft, and the whole grant is revoked
+  rotated_at timestamptz,                           -- a rotated-out token presented within seconds is a concurrent client, not theft
   expires_at        timestamptz NOT NULL,
   revoked_at        timestamptz,
   last_used_at      timestamptz,

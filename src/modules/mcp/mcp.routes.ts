@@ -33,17 +33,21 @@ export function mcpRoutes(d: McpRouteDeps) {
   };
   r.get(["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"], meta);
 
-  r.all("/mcp", d.limit({ name: "mcp-ip", limit: 600, windowS: 60 }), async (req, res) => {
+  const bearer = (req: Request) => /^Bearer ([^\s]+)$/i.exec(req.header("authorization") ?? "")?.[1];
+  const authenticate: RequestHandler = async (req, res, next) => {
     const origin = req.header("origin");
     if (origin && !d.allowedOrigins.includes(origin)) { res.status(403).json({ error: { code: "ORIGIN_NOT_ALLOWED", message: "Origin not allowed", requestId: req.id } }); return; }
-    const m = /^Bearer ([^\s]+)$/i.exec(req.header("authorization") ?? "");
-    if (!m) return challenge(req, res);
-    const p = await d.auth.verify(m[1]!);
+    const tok = bearer(req);
+    if (!tok) return challenge(req, res);
+    const p = await d.auth.verify(tok);
     if (!p) return challenge(req, res, "invalid_token");
-    // Per-credential limit (after authentication, so unauthenticated floods cannot burn a victim's budget).
-    let limited = false;
-    await d.limit({ name: "mcp-token", limit: 120, windowS: 60, key: () => sha256(m[1]!).slice(0, 16) })(req, { setHeader: () => res, status: () => { limited = true; return res; }, json: (b: unknown) => { res.status(429).json(b); } } as never, () => {});
-    if (limited) return;
+    res.locals["mcpPrincipal"] = p;
+    next();
+  };
+  // Per-credential limit runs after authentication, so unauthenticated floods cannot burn a victim's budget.
+  const perToken = d.limit({ name: "mcp-token", limit: 120, windowS: 60, key: (req) => sha256(bearer(req) ?? "").slice(0, 16) });
+  r.all("/mcp", d.limit({ name: "mcp-ip", limit: 600, windowS: 60 }), authenticate, perToken, async (req, res) => {
+    const p = res.locals["mcpPrincipal"] as NonNullable<Awaited<ReturnType<typeof d.auth.verify>>>;
     const raw = (req as unknown as { rawBody?: Buffer }).rawBody;
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string" && k !== "host" && k !== "authorization" && k !== "content-length") headers.set(k, v);

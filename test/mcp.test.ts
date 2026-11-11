@@ -42,7 +42,7 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
     const tools = (await c.listTools()).tools;
     expect(tools.map((x) => x.name).sort()).toEqual(["compare_platform_performance", "create_billing_portal_session", "get_account_analytics", "get_analytics_overview", "get_available_plans", "get_current_plan", "get_engagement_trends", "get_follower_growth", "get_post_analytics", "get_subscription", "get_top_posts", "get_usage_summary", "list_invoices", "list_recent_posts", "list_social_accounts"]);
     expect(TOOLS.length).toBe(15);
-    for (const tool of tools) { expect(tool.description!.length, tool.name).toBeGreaterThan(40); expect(tool.annotations?.readOnlyHint, tool.name).toBe(true); }
+    for (const tool of tools) { expect(tool.description!.length, tool.name).toBeGreaterThan(40); expect(tool.annotations?.readOnlyHint, tool.name).toBe(tool.name !== "create_billing_portal_session"); }   // the portal tool mints a link and writes an audit row: not read-only
     expect((await c.listResources()).resources.map((r) => r.uri).sort()).toEqual(["analytics://metric-definitions", "analytics://overview", "analytics://top-posts", "billing://subscription", "billing://usage", "social://accounts"]);
     expect((await c.listPrompts()).prompts.map((p) => p.name).sort()).toEqual(["content-repurposing", "cross-platform-content-analysis", "subscription-usage-review", "weekly-performance-review"]);
   });
@@ -88,6 +88,7 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
     await upgrade(ws);
     const c = await connect(principal(owner));
     expect((await call(c, "get_analytics_overview", { from: "yesterday" })).isError).toBe(true);
+    expect((await call(c, "get_analytics_overview", { from: "2026-13-45" })).isError).toBe(true);     // well-formed but not a date: rejected up front, not a SQL error
     const long = await call(c, "get_analytics_overview", { from: "2020-01-01", to: "2024-01-01" });
     expect(long.isError).toBe(true);
     expect(long.data.error.message).toMatch(/366/);

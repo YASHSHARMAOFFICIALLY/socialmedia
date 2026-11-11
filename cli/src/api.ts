@@ -47,14 +47,29 @@ export async function pollDevice(apiUrl: string, d: DeviceStart, o: { f?: typeof
   throw new ApiError("expired_token", "The code expired; run login again");
 }
 
-/** Rotating refresh: the old refresh token is dead after this call, so the result is saved before anything else happens. */
+/**
+ * Rotating refresh: the old refresh token is dead after this call, so the result is saved before anything else happens.
+ * Several `serve` processes can share one login: adopt tokens another process already rotated instead of replaying a dead one,
+ * and only wipe the store when the server says the grant is gone (a 429/5xx must not log the user out).
+ */
 export async function refresh(c: Credentials, f?: typeof fetch, now = Date.now()): Promise<Credentials> {
   if (!c.refreshToken) throw new ApiError("no_refresh", "Session expired; run `distora mcp login`");
-  const r = await post(c.apiUrl, "/mcp/token", { grant_type: "refresh_token", refresh_token: c.refreshToken }, f);
-  if (r.status !== 200) { store.clear(); throw new ApiError("invalid_grant", "Session ended; run `distora mcp login`"); }
-  const next = toCreds(c.apiUrl, r.json, now);
-  store.save(next);
-  return next;
+  const newer = () => { const s = store.load(); return s?.refreshToken && s.refreshToken !== c.refreshToken ? s : null; };
+  const adopted = newer();
+  if (adopted?.expiresAt && adopted.expiresAt - now > 60_000) return adopted;
+  const r = await post(c.apiUrl, "/mcp/token", { grant_type: "refresh_token", refresh_token: (adopted ?? c).refreshToken! }, f);
+  if (r.status === 200) {
+    const next = toCreds(c.apiUrl, r.json, now);
+    store.save(next);
+    return next;
+  }
+  if (r.json["error"] === "invalid_grant") {
+    const raced = newer();     // lost a race with another process that has saved newer tokens since
+    if (raced) return raced;
+    store.clear();
+    throw new ApiError("invalid_grant", "Session ended; run `distora mcp login`");
+  }
+  throw new ApiError("refresh_failed", "Could not refresh the session right now; try again shortly");
 }
 
 /** A fetch that always sends a fresh bearer token (refreshing 60s early), for the MCP client transport. */

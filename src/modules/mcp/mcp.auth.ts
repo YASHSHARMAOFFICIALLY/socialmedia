@@ -9,6 +9,7 @@ const ACCESS_TTL_S = 3600;                       // device-flow access tokens li
 const DEVICE_GRANT_TTL_S = 30 * 86400;           // refresh token lifetime (rotating)
 const DEVICE_CODE_TTL_S = 600;
 const POLL_INTERVAL_S = 5;
+const REFRESH_GRACE_S = 120;                     // a rotated-out refresh token presented this soon is a concurrent client, not theft
 const MAX_PAT_DAYS = 90;
 const MAX_ACTIVE_PATS = 20;
 // No 0/O/1/I/L: the code is read aloud and typed.
@@ -83,7 +84,7 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
 
     // ---- Device authorization (RFC 8628), for the local CLI
     async deviceStart(i: { clientName: string; scopes: readonly string[] }, verificationBase: string) {
-      const scopes = normalizeScopes(i.scopes.length ? i.scopes : SCOPES);
+      const scopes = normalizeScopes(i.scopes.length ? i.scopes : SCOPES.filter((x) => x !== "billing:portal"))   // least privilege by default; the portal link is opt-in;
       const device = secret("dsd"), code = userCode();
       await db.query("INSERT INTO mcp_device_codes (device_code_hash, user_code, client_name, scopes, expires_at) VALUES ($1,$2,$3,$4, now() + make_interval(secs => $5))", [sha256(device), code, i.clientName.slice(0, 80), scopes, DEVICE_CODE_TTL_S]);
       return { device_code: device, user_code: code, verification_uri: `${verificationBase}/mcp/device`, verification_uri_complete: `${verificationBase}/mcp/device?user_code=${code}`, expires_in: DEVICE_CODE_TTL_S, interval: POLL_INTERVAL_S };
@@ -93,7 +94,7 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
       return r ? { clientName: r.client_name, scopes: r.scopes } : null;
     },
     async deviceDecide(a: Actor, code: string, workspaceId: string, approve: boolean) {
-      await workspaces.authorize(a.id, workspaceId, "workspace:read");                 // the approver must really belong to the workspace
+      await workspaces.authorize(a.id, workspaceId, "mcp:manage");                     // same bar as creating a PAT: a device grant is a long-lived credential
       const r = await db.query("UPDATE mcp_device_codes SET status = $2, user_id = $3, workspace_id = $4 WHERE user_code = $1 AND status = 'pending' AND expires_at > now()", [code.toUpperCase(), approve ? "approved" : "denied", a.id, workspaceId]);
       if (!r.rowCount) throw notFound("Code");
       await auditRepository.record(db, { workspaceId, actorId: a.id, action: approve ? "mcp.device.approved" : "mcp.device.denied", entityType: "mcp_device", metadata: {}, ...(a.requestId ? { requestId: a.requestId } : {}) });
@@ -124,9 +125,10 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
       const h = sha256(refreshToken);
       const out = await db.tx(async (q) => {
         const g = (await q.query<{ id: string; workspace_id: string; scopes: string[]; matched: string }>(
-          `SELECT id, workspace_id, scopes, CASE WHEN refresh_hash = $1 THEN 'current' ELSE 'previous' END AS matched FROM mcp_grants
-            WHERE (refresh_hash = $1 OR prev_refresh_hash = $1) AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`, [h])).rows[0];
+          `SELECT id, workspace_id, scopes, CASE WHEN refresh_hash = $1 THEN 'current' WHEN rotated_at > now() - make_interval(secs => ${REFRESH_GRACE_S}) THEN 'recent' ELSE 'previous' END AS matched FROM mcp_grants
+            WHERE (refresh_hash = $1 OR $1 = ANY(old_refresh_hashes)) AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`, [h])).rows[0];
         if (!g) return { err: "invalid" as const };
+        if (g.matched === "recent") return { err: "stale" as const };   // two processes sharing one login raced; the loser must re-read the winner's tokens (no revocation)
         if (g.matched === "previous") {
           await q.query("UPDATE mcp_grants SET revoked_at = now() WHERE id = $1", [g.id]);
           await q.query("DELETE FROM mcp_access_tokens WHERE grant_id = $1", [g.id]);
@@ -134,12 +136,12 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
           return { err: "reuse" as const };
         }
         const next = secret("dsr");
-        await q.query("UPDATE mcp_grants SET prev_refresh_hash = refresh_hash, refresh_hash = $2 WHERE id = $1", [g.id, sha256(next)]);
+        await q.query("UPDATE mcp_grants SET old_refresh_hashes = (old_refresh_hashes || refresh_hash)[GREATEST(1, cardinality(old_refresh_hashes || refresh_hash) - 9):], refresh_hash = $2, rotated_at = now() WHERE id = $1", [g.id, sha256(next)]);
         const access = await mintAccess(q, g.id, ACCESS_TTL_S);
         return { ok: { access_token: access, refresh_token: next, token_type: "Bearer", expires_in: ACCESS_TTL_S, scope: g.scopes.join(" "), workspace_id: g.workspace_id } };
       });
       if ("ok" in out) return out.ok;
-      throw new OAuthError("invalid_grant", out.err === "reuse" ? "Refresh token reuse detected; the session was revoked" : "Invalid refresh token");
+      throw new OAuthError("invalid_grant", out.err === "reuse" ? "Refresh token reuse detected; the session was revoked" : out.err === "stale" ? "Refresh token was just rotated by another client; use the newest one" : "Invalid refresh token");
     },
 
     async purge() {

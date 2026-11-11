@@ -36,7 +36,7 @@ export const billingTools = [
     handler: async (c) => ({ plans: await c.deps.billing.plans() }),
   }),
   defineTool({
-    name: "create_billing_portal_session", title: "Create billing portal link", scope: "billing:portal", gated: false,
+    name: "create_billing_portal_session", title: "Create billing portal link", scope: "billing:portal", gated: false, readOnly: false,
     description: "Create a short-lived, single-purpose link to the provider's hosted billing portal where the OWNER can manage payment method, plan and invoices. Owner only. Give the URL to the user; do not open it yourself and do not store it.",
     input: z.object({ workspaceId }),
     handler: async (c) => c.deps.billingPayments.portal(c.actor, c.workspaceId),

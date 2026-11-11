@@ -12,11 +12,14 @@ const file = () => join(dir(), "credentials.json");
 
 interface Backend { name: string; read(): string | null; write(v: string): void; remove(): void }
 
-/** macOS Keychain via `security`. Note: the secret is briefly visible in this user's process list (argv); acceptable within one user's trust boundary. */
+/**
+ * macOS Keychain via `security -i`: commands are read from stdin, so the secret never appears in argv (`ps` shows argv to every local user).
+ * The value is stored base64-encoded so it needs no shell/keychain quoting; legacy raw-JSON entries are still read.
+ */
 const macKeychain: Backend = {
   name: "macOS Keychain",
-  read: () => { try { return execFileSync("security", ["find-generic-password", "-s", SERVICE, "-a", ACCOUNT, "-w"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return null; } },
-  write: (v) => { execFileSync("security", ["add-generic-password", "-U", "-s", SERVICE, "-a", ACCOUNT, "-w", v], { stdio: "ignore" }); },
+  read: () => { try { const v = execFileSync("security", ["find-generic-password", "-s", SERVICE, "-a", ACCOUNT, "-w"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); return v.startsWith("{") ? v : Buffer.from(v, "base64").toString("utf8"); } catch { return null; } },
+  write: (v) => { const r = spawnSync("security", ["-i"], { input: `add-generic-password -U -s ${SERVICE} -a ${ACCOUNT} -w ${Buffer.from(v).toString("base64")}\n`, stdio: ["pipe", "ignore", "ignore"] }); if (r.status !== 0) throw new Error("security failed"); },
   remove: () => { try { execFileSync("security", ["delete-generic-password", "-s", SERVICE, "-a", ACCOUNT], { stdio: "ignore" }); } catch { /* not there */ } },
 };
 /** Linux Secret Service via libsecret's `secret-tool`; the secret goes over stdin, never argv. */

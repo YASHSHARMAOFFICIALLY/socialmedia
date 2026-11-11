@@ -14,7 +14,7 @@ export const TOOLS: ToolDef[] = [...analyticsTools, ...billingTools];
 export function buildMcpServer(deps: McpDeps, principal: Principal): McpServer {
   const server = new McpServer({ name: "distora", version: "1.0.0" });
   for (const def of TOOLS) {
-    server.registerTool(def.name, { title: def.title, description: def.description, inputSchema: def.input, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } }, async (args: Record<string, unknown>) => {
+    server.registerTool(def.name, { title: def.title, description: def.description, inputSchema: def.input, annotations: { readOnlyHint: def.readOnly !== false, destructiveHint: false, openWorldHint: false } }, async (args: Record<string, unknown>) => {
       let ws: string | null = null;
       try {
         const c = await guard(deps, principal, def.scope, args["workspaceId"] as string | undefined, def.gated !== false);

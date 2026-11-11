@@ -39,6 +39,18 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     expect((await request(t.app).get("/.well-known/oauth-protected-resource/mcp")).body).toMatchObject({ bearer_methods_supported: ["header"] });
   });
 
+  it("per-token rate limit answers 429 with Retry-After (not 200), and does not affect other tokens", async () => {
+    const { owner, ws } = await world(t, ["x"]);
+    const a = await pat(owner, ws), b = await pat(owner, ws);
+    let last = 200;
+    for (let i = 0; i < 125 && last === 200; i++) last = (await rpc(a.token)).status;
+    expect(last).toBe(429);
+    const again = await rpc(a.token);
+    expect(again.status).toBe(429);
+    expect(again.headers["retry-after"]).toBeDefined();
+    expect((await rpc(b.token)).status).toBe(200);
+  });
+
   it("PAT: shown once, stored only as a hash, scoped, workspace-bound, owner/admin only, limited lifetime", async () => {
     const { owner, ws } = await world(t, ["x"]);
     await upgrade(ws);
@@ -93,6 +105,9 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     expect(page.text).toContain("distora-cli");
     expect(page.text).toContain(ws);
     const stranger = await t.newUser("st");
+    const viewer = await t.newUser("vw");
+    await t.db.query("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,'viewer')", [ws, viewer.id]);
+    expect((await viewer.agent.post("/mcp/device/approve").type("form").send({ user_code: start.user_code, workspace_id: ws, decision: "approve" })).status).toBe(403);   // mcp:manage, like PATs
     expect((await stranger.agent.post("/mcp/device/approve").type("form").send({ user_code: start.user_code, workspace_id: ws, decision: "approve" })).status).toBe(404);   // cannot approve into a workspace they are not in
     expect((await owner.agent.post("/mcp/device/approve").type("form").send({ user_code: start.user_code, workspace_id: ws, decision: "approve" })).status).toBe(200);
     await t.db.query("UPDATE mcp_device_codes SET last_polled_at = now() - interval '1 minute'");
@@ -104,11 +119,16 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     const r1 = (await refresh(tok.refresh_token)).body;
     expect(r1.refresh_token).not.toBe(tok.refresh_token);
     expect((await rpc(r1.access_token)).status).toBe(200);
-    const replay = await refresh(tok.refresh_token);                                                   // the OLD refresh token again = theft signal
+    const race = await refresh(tok.refresh_token);                                                     // a concurrent client replaying the just-rotated token: refused, grant kept
+    expect(race.body.error).toBe("invalid_grant");
+    expect((await rpc(r1.access_token)).status).toBe(200);
+    const r2 = (await refresh(r1.refresh_token)).body;                                                 // rotate twice, as a thief would
+    await t.db.query("UPDATE mcp_grants SET rotated_at = now() - interval '10 minutes'");
+    const replay = await refresh(tok.refresh_token);                                                   // the FIRST token again, two rotations later = theft signal
     expect(replay.status).toBe(400);
     expect(replay.body.error).toBe("invalid_grant");
-    expect((await rpc(r1.access_token)).status).toBe(401);                                             // whole grant is dead
-    expect((await refresh(r1.refresh_token)).status).toBe(400);
+    expect((await rpc(r2.access_token)).status).toBe(401);                                             // whole grant is dead
+    expect((await refresh(r2.refresh_token)).status).toBe(400);
     expect((await t.db.query("SELECT 1 FROM audit_logs WHERE action = 'mcp.grant.reuse_detected'")).rowCount).toBe(1);
   });
 
