@@ -79,11 +79,31 @@ describe("Bluesky", () => {
     expect(m.metrics.find((x) => x.originalName === "likeCount")).toMatchObject({ value: 3, availability: "available" });
     expect(m.metrics.find((x) => x.originalName === "replyCount")).toMatchObject({ value: null, availability: "unavailable" });
   });
-  it("rules: 300 graphemes counted by grapheme, video rejected, 5 images rejected", () => {
+  it("video: service auth, upload to video.bsky.app, poll until the blob, embed.video in the record", async () => {
+    const states = [{ jobId: "J" }, { jobStatus: { jobId: "J", state: "JOB_STATE_RUNNING" } }, { jobStatus: { jobId: "J", blob: { ref: "vb" } } }];
+    const h = harness((c) => c.url.includes("getServiceAuth") ? Response.json({ token: "SVC" })
+      : c.url.includes("uploadVideo") || c.url.includes("getJobStatus") ? Response.json(states.shift())
+      : c.url.includes("createRecord") ? Response.json({ uri: "at://did:plc:1/app.bsky.feed.post/job-1" }) : new Response(new Uint8Array(5)));
+    await createBlueskyAdapter({ pollMs: 1 }, h.f).publish!(input(content({ metadata: { aspectRatio: { width: 16, height: 9 } } }), [mk("video")], { handle: "a" }, "did:plc:1"));
+    const auth = new URL(h.calls.find((c) => c.url.includes("getServiceAuth"))!.url);
+    expect(auth.searchParams.get("aud")).toBe("did:web:bsky.social");
+    expect(auth.searchParams.get("lxm")).toBe("com.atproto.repo.uploadBlob");
+    const up = h.calls.find((c) => c.url.includes("uploadVideo"))!;
+    expect(up.url).toContain("https://video.bsky.app/xrpc/app.bsky.video.uploadVideo?did=did%3Aplc%3A1");
+    expect(up.headers.authorization).toBe("Bearer SVC");
+    expect(h.calls.at(-1)!.body).toMatchObject({ record: { embed: { $type: "app.bsky.embed.video", video: { ref: "vb" }, aspectRatio: { width: 16, height: 9 } } } });
+  });
+  it("video: a failed job is permanent and nothing is posted", async () => {
+    const h = harness((c) => c.url.includes("getServiceAuth") ? Response.json({ token: "S" }) : c.url.includes("uploadVideo") ? Response.json({ jobId: "J", state: "JOB_STATE_FAILED", error: "bad" }) : new Response(new Uint8Array(5)));
+    const e = await errKind(createBlueskyAdapter({ pollMs: 1 }, h.f).publish!(input(content(), [mk("video")], {}, "did:plc:1"))); expect(e?.kind).toBe("permanent");
+    expect(h.calls.some((c) => c.url.includes("createRecord"))).toBe(false);
+  });
+  it("rules: 300 graphemes counted by grapheme, one video allowed but not mixed, 5 images rejected", () => {
     const r = contentRules.bluesky;
     expect(r.validate({ ...content({ text: "👨‍👩‍👧".repeat(300) }) }).some((i) => i.code === "TEXT_LONG")).toBe(false);
     expect(r.validate(content({ text: "a".repeat(301) })).some((i) => i.code === "TEXT_LONG")).toBe(true);
-    expect(r.validate(content({ media: [mediaOf("video")] })).some((i) => i.code === "VIDEO_UNSUPPORTED")).toBe(true);
+    expect(r.validate(content({ media: [mediaOf("video")] })).filter((i) => i.severity === "error")).toEqual([]);
+    expect(r.validate(content({ media: [mediaOf("video"), mediaOf("image")] })).some((i) => i.code === "ONE_VIDEO")).toBe(true);
     expect(r.validate(content({ media: Array(5).fill(mediaOf("image")) })).some((i) => i.code === "TOO_MANY_IMAGES")).toBe(true);
   });
 });

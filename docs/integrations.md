@@ -90,7 +90,8 @@ Verified (API v5 OpenAPI spec): token endpoint with HTTP Basic; apps activated a
 
 ### Bluesky  (credentials; optional `BLUESKY_SERVICE`)
 Verified (atproto lexicons): app password (never the account password), `createSession`/`refreshSession`, `createRecord`, `uploadBlob`.
-- Text ≤300 graphemes (≤3000 bytes), up to 4 images ≤2,000,000 bytes each; link/mention/hashtag facets with byte offsets. No video.
+- Text ≤300 graphemes (≤3000 bytes), up to 4 images ≤2,000,000 bytes each; link/mention/hashtag facets with byte offsets.
+- One video instead of images (flow from the official tutorial, UNVERIFIED live): `getServiceAuth` → `video.bsky.app` `uploadVideo` → poll `getJobStatus` until a blob → `app.bsky.embed.video`. Optional `metadata.aspectRatio {width,height}`. Size/duration limits and job state names are not in the tutorial, so only a missing blob or an explicit failed state is acted on; mp4 recommended.
 - Deterministic `rkey` derived from the idempotency key → exact reconcile via `getRecord`.
 - Metrics via public appview `getPosts` (likes, reposts, replies, quotes) and `getProfile` (followers).
 
@@ -105,7 +106,7 @@ Verified (core.telegram.org/bots/api): `sendMessage` (≤4096), `sendPhoto` / `s
 - 1 media, or an album of 2-10 photos/videos (sendMediaGroup, caption on the first item); plain text (no parse_mode). No reconcile and no post analytics (Bot API has neither); only metric: member count.
 
 ### Deliberately not built
-Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time series, Bluesky video.
+Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time series.
 
 ## Competitor intelligence (X, YouTube)
 Public data only, read through the official API with one of your own connected accounts. Instagram (needs Facebook Login) and LinkedIn do not offer this to these integrations → `422 CAPABILITY_UNSUPPORTED`. Competitor analytics are never mixed with your private analytics: comparisons use only publicly visible counts (likes, comments, reposts, quotes). Hidden counts are `null`, not 0.

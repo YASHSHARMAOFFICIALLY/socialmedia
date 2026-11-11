@@ -96,7 +96,7 @@
 - Tests: `test/integrations/more-platforms.test.ts` (32, mocked fetch), `test/credential-accounts.test.ts` (5).
 - **TikTok is UNVERIFIED**: first-party docs were not fetchable (JS-rendered); endpoint URLs from search titles, field shapes from third-party guides. Check + `npm run test:live` before use. Unaudited TikTok apps post private only.
 - Gates: Meta App Review (Threads non-testers, Facebook), Pinterest Trial access (self-visible pins), TikTok audit + verified media domain.
-- Not built: Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp/Discord (messaging, not social posting), Tumblr (optional later); video transcoding, Bluesky video, Facebook/TikTok/Pinterest-pin analytics. Competitors remain X/YouTube only.
+- Not built: Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp/Discord (messaging, not social posting), Tumblr (optional later); video transcoding, Facebook/TikTok/Pinterest-pin analytics. Competitors remain X/YouTube only.
 
 ## Phase 13 — Analytics gaps, billing, MCP, CLI: DONE (mocked/in-process tests only)
 Details: docs/billing.md, docs/mcp.md. Decisions (user, 2026-11-11): keep Cloudflare Workers (no Redis/BullMQ), billing per workspace, **Dodo Payments** as the provider (Razorpay dropped), CLI proxies to remote `/mcp`, backend-only admin, placeholder plan prices until real numbers are supplied, never deploy or touch a production DB from the agent.
@@ -143,3 +143,4 @@ Built since: video re-encoding/downscaling via Cloudflare Media Transformations 
 
 Built since: Telegram albums (sendMediaGroup, 2-10 items).
 Built since: Pinterest video pins (UNVERIFIED flow, mocked tests).
+Built since: Bluesky video (flow per official tutorial; limits/state names unconfirmed; mocked tests only).

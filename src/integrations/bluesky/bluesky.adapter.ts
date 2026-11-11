@@ -8,6 +8,10 @@ import { graphemes } from "./bluesky.rules.js";
 // refreshSession (Authorization: Bearer <refreshJwt>) -> new pair; com.atproto.repo.createRecord {repo,collection,rkey?,record};
 // uploadBlob (raw bytes) -> {blob}; app.bsky.feed.getPosts?uris= -> postView {likeCount,repostCount,replyCount,quoteCount,bookmarkCount};
 // app.bsky.actor.getProfile -> followersCount. Auth is an APP PASSWORD (Bluesky Settings), never the account password.
+// Video (official tutorial docs.bsky.app/docs/tutorials/video): getServiceAuth {aud: did:web:<PDS host>, lxm: com.atproto.repo.uploadBlob, exp ~30 min} ->
+// POST video.bsky.app/xrpc/app.bsky.video.uploadVideo?did&name (Bearer service token, raw bytes, video/mp4) -> job {jobId, blob when done} -> poll
+// app.bsky.video.getJobStatus?jobId until a blob appears -> embed {$type: app.bsky.embed.video, video: blob, aspectRatio}. Job state names and limits are NOT
+// confirmed (tutorial lists neither); we only trust "a blob appeared" and an explicit failed state. Unverified against the live service.
 // A caller-chosen rkey makes createRecord idempotent per job and lets us look the post up exactly (getRecord) after an unknown outcome.
 export const PUBLIC_APPVIEW = "https://public.api.bsky.app";
 const classify = (_s: number, b: unknown) => ((b as { error?: string } | null)?.error === "ExpiredToken" || (b as { error?: string } | null)?.error === "InvalidToken" ? "auth_expired" as const : undefined);
@@ -35,14 +39,16 @@ export function facets(text: string) {
   return out;
 }
 
-export function createBlueskyAdapter(cfg: { service?: string } = {}, f: typeof fetch = fetch): SocialAdapter {
+export const VIDEO_SERVICE = "https://video.bsky.app";
+
+export function createBlueskyAdapter(cfg: { service?: string; pollMs?: number } = {}, f: typeof fetch = fetch): SocialAdapter {
   const base = (cfg.service ?? "https://bsky.social").replace(/\/$/, "");
   const x = (path: string) => `${base}/xrpc/${path}`;
   const json = (token: string) => ({ authorization: `Bearer ${token}`, "content-type": "application/json" });
 
   return {
     platform: "bluesky",
-    capabilities: { ...NO_CAPABILITIES, textPost: true, imagePost: true, tokenRefresh: true, lookupRecentPosts: true, postAnalytics: true, accountAnalytics: true, engagementMetrics: true },
+    capabilities: { ...NO_CAPABILITIES, textPost: true, imagePost: true, videoPost: true, tokenRefresh: true, lookupRecentPosts: true, postAnalytics: true, accountAnalytics: true, engagementMetrics: true },
     oauth: {
       ...NO_OAUTH,
       async refresh(refreshJwt) {
@@ -77,16 +83,22 @@ export function createBlueskyAdapter(cfg: { service?: string } = {}, f: typeof f
       const text = withHashtags(content);
       if (graphemes(text) > 300) throw new PlatformError("permanent", "Text exceeds 300 graphemes");
       const images = media.filter((m) => m.role === "media");
-      if (images.some((m) => m.kind !== "image")) throw new PlatformError("permanent", "Only images are supported");
+      const video = images.find((m) => m.kind === "video");
+      if (video && images.length > 1) throw new PlatformError("permanent", "A video cannot be combined with other media");
       const embeds: unknown[] = [];
-      for (const m of images) {
+      for (const m of images.filter((x) => x.kind === "image")) {
         const src = await f(await m.url(), { signal });
         if (!src.ok) throw new PlatformError("retryable", `Could not read media from storage (${src.status})`);
         const up = await apiFetch(f, "bluesky", x("com.atproto.repo.uploadBlob"), { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": m.mimeType }, body: await src.arrayBuffer(), signal }, { classify });
         embeds.push({ alt: String(content.metadata.altText ?? ""), image: ((await up.json()) as { blob: unknown }).blob });
       }
+      let embed: unknown = embeds.length ? { $type: "app.bsky.embed.images", images: embeds } : undefined;
+      if (video) {
+        const ar = content.metadata.aspectRatio as { width?: number; height?: number } | undefined;
+        embed = { $type: "app.bsky.embed.video", video: await uploadVideo(accessToken, account.externalId, await video.url(), video.mimeType, signal), ...(ar?.width && ar.height ? { aspectRatio: { width: ar.width, height: ar.height } } : {}) };
+      }
       const rkey = rkeyOf(idempotencyKey);
-      const record = { $type: "app.bsky.feed.post", text, createdAt: new Date().toISOString(), ...(facets(text).length ? { facets: facets(text) } : {}), ...(embeds.length ? { embed: { $type: "app.bsky.embed.images", images: embeds } } : {}) };
+      const record = { $type: "app.bsky.feed.post", text, createdAt: new Date().toISOString(), ...(facets(text).length ? { facets: facets(text) } : {}), ...(embed ? { embed } : {}) };
       const did = account.externalId;
       try {
         const res = await apiFetch(f, "bluesky", x("com.atproto.repo.createRecord"), { method: "POST", headers: json(accessToken), body: JSON.stringify({ repo: did, collection: "app.bsky.feed.post", rkey, record }), signal }, { creates: true, classify });
@@ -119,6 +131,25 @@ export function createBlueskyAdapter(cfg: { service?: string } = {}, f: typeof f
 
   async function fetch_(url: string): Promise<{ displayName?: string; avatar?: string } | null> {
     try { const r = await f(url); return r.ok ? ((await r.json()) as { displayName?: string; avatar?: string }) : null; } catch { return null; }
+  }
+  async function uploadVideo(token: string, did: string, url: string, mime: string, signal: AbortSignal): Promise<unknown> {
+    const auth = await apiFetch(f, "bluesky", x(`com.atproto.server.getServiceAuth?${new URLSearchParams({ aud: `did:web:${new URL(base).host}`, lxm: "com.atproto.repo.uploadBlob", exp: String(Math.floor(Date.now() / 1000) + 1800) })}`), { headers: { authorization: `Bearer ${token}` }, signal }, { classify });
+    const svc = ((await auth.json()) as { token?: string }).token;
+    if (!svc) throw new PlatformError("permanent", "bluesky getServiceAuth returned no token");
+    const src = await f(url, { signal });
+    if (!src.ok) throw new PlatformError("retryable", `Could not read media from storage (${src.status})`);
+    const up = await apiFetch(f, "bluesky", `${VIDEO_SERVICE}/xrpc/app.bsky.video.uploadVideo?${new URLSearchParams({ did, name: "video.mp4" })}`, { method: "POST", headers: { authorization: `Bearer ${svc}`, "content-type": mime }, body: await src.arrayBuffer(), signal });
+    let job = (await up.json()) as { jobId?: string; blob?: unknown; state?: string; error?: string };
+    // an identical re-upload answers with an existing job that already carries the blob, so a retry is safe
+    for (let i = 0; i < 60 && !job.blob; i++) {
+      if (job.error || /FAILED/i.test(job.state ?? "")) throw new PlatformError("permanent", `bluesky video processing failed${job.error ? `: ${String(job.error).slice(0, 200)}` : ""}`);
+      if (!job.jobId) throw new PlatformError("permanent", "bluesky uploadVideo returned no jobId");
+      await new Promise((ok) => setTimeout(ok, cfg.pollMs ?? 1000));
+      const st = await apiFetch(f, "bluesky", `${VIDEO_SERVICE}/xrpc/app.bsky.video.getJobStatus?${new URLSearchParams({ jobId: job.jobId })}`, { signal });
+      job = ((await st.json()) as { jobStatus?: typeof job }).jobStatus ?? {};
+    }
+    if (!job.blob) throw new PlatformError("retryable", "bluesky video is still processing"); // nothing is posted yet, a retry is safe
+    return job.blob;
   }
   async function getRecord(token: string, did: string, rkey: string) {
     const res = await f(x(`com.atproto.repo.getRecord?${new URLSearchParams({ repo: did, collection: "app.bsky.feed.post", rkey })}`), { headers: { authorization: `Bearer ${token}` } }).catch(() => null);
