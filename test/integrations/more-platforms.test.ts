@@ -252,7 +252,7 @@ describe("Facebook Pages", () => {
 });
 
 describe("Pinterest", () => {
-  const ad = (f: typeof fetch) => createPinterestAdapter({ clientId: "cid", clientSecret: "sec" }, f);
+  const ad = (f: typeof fetch) => createPinterestAdapter({ clientId: "cid", clientSecret: "sec", pollMs: 1 }, f);
   it("token exchange uses Basic auth + form body; refresh uses grant_type=refresh_token", async () => {
     const h = harness(() => Response.json({ access_token: "A", refresh_token: "R", expires_in: 3600, refresh_token_expires_in: 5184000, scope: "pins:write,boards:read" }));
     const t = await ad(h.f).oauth.exchangeCode({ code: "C", redirectUri: "https://api/cb" });
@@ -271,8 +271,31 @@ describe("Pinterest", () => {
     expect((await errKind(ad(h.f).publish!(input(content(), [mk("image")]))))?.kind).toBe("permanent");
     expect((await errKind(ad(h.f).publish!(input(content({ metadata: { boardId: "99" } })))))?.kind).toBe("permanent");
   });
+  const cover = { ...mk("image"), role: "thumbnail" as const, url: async () => "https://r2.example/cover" };
+  const videoRoute = (statuses: string[]) => (c: Call) => c.url.endsWith("/v5/media") ? Response.json({ media_id: "M1", upload_url: "https://up.example/x", upload_parameters: { key: "k1" } })
+    : c.url === "https://up.example/x" ? new Response(null, { status: 204 })
+    : c.url.endsWith("/v5/media/M1") ? Response.json({ status: statuses.shift() })
+    : c.url.endsWith("/v5/pins") ? Response.json({ id: "55" }) : new Response(new Uint8Array(4));
+  it("video pin: register, multipart upload with returned params, poll until succeeded, pin with video_id + cover", async () => {
+    const h = harness(videoRoute(["processing", "succeeded"]));
+    const r = await ad(h.f).publish!(input(content({ metadata: { boardId: "99" } }), [mk("video"), cover]));
+    expect(r.externalId).toBe("55");
+    const up = h.calls.find((c) => c.url === "https://up.example/x")!;
+    expect((up.body as FormData).get("key")).toBe("k1");
+    expect((up.body as FormData).get("file")).toBeInstanceOf(Blob);
+    expect(h.calls.filter((c) => c.url.endsWith("/v5/media/M1"))).toHaveLength(2);
+    expect(h.calls.at(-1)!.body).toMatchObject({ media_source: { source_type: "video_id", media_id: "M1", cover_image_url: "https://r2.example/cover" } });
+  });
+  it("video pin: failed processing is permanent and no pin is created; missing cover refused", async () => {
+    const h = harness(videoRoute(["failed"]));
+    expect((await errKind(ad(h.f).publish!(input(content({ metadata: { boardId: "99" } }), [mk("video"), cover]))))?.kind).toBe("permanent");
+    expect(h.calls.some((c) => c.url.endsWith("/v5/pins"))).toBe(false);
+    expect((await errKind(ad(h.f).publish!(input(content({ metadata: { boardId: "99" } }), [mk("video")]))))?.kind).toBe("permanent");
+  });
   it("rules enforce the spec limits and boardId", () => {
     const r = contentRules.pinterest;
+    expect(r.validate(content({ metadata: { boardId: "1" }, media: [mediaOf("video"), { ...mediaOf("image"), role: "thumbnail" as const }] })).map((i) => i.code)).toEqual([]);
+    expect(r.validate(content({ metadata: { boardId: "1" }, media: [mediaOf("video")] })).map((i) => i.code)).toContain("VIDEO_NEEDS_COVER");
     const codes = (c: ContentInput) => r.validate(c).map((i) => i.code);
     expect(codes(content({ media: [mediaOf("image")] }))).toContain("BOARD_REQUIRED");
     expect(codes(content({ title: "t".repeat(101), text: "d".repeat(801), metadata: { boardId: "1" }, media: [mediaOf("image")] }))).toEqual(expect.arrayContaining(["TITLE_LONG", "DESC_LONG"]));

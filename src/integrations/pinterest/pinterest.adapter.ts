@@ -9,11 +9,15 @@ import { NO_CAPABILITIES, type MetricsResult, type OAuthTokens, type SocialAdapt
 // POST /v5/pins {board_id, title, description, link, alt_text, media_source:{source_type:"image_url", url}} ; GET /v5/user_account
 // -> {username, profile_image, account_type, follower_count}. Authorize: https://www.pinterest.com/oauth/ .
 // Trial access apps can only create pins visible to themselves until Pinterest upgrades them to Standard access.
+// Video pins (UNVERIFIED end to end): POST /v5/media {media_type:"video"} -> {media_id, upload_url, upload_parameters} (generated client docs);
+// upload = multipart POST to upload_url with every upload_parameter then the `file` part; GET /v5/media/{id} -> {status} (values registered|processing|succeeded|failed
+// come from third-party guides only); then POST /v5/pins with media_source {source_type:"video_id", media_id, cover_image_url}. A community report says the
+// cover is required in practice, so it is. The file is buffered in memory (ceiling: Workers memory; rules cap video size). Video pins are not available in the sandbox.
 // NOT claimed: pin analytics (response shape not confirmed), reconcile (no lookup-by-content endpoint used).
 const API = "https://api.pinterest.com/v5";
 export const PINTEREST_SCOPES = ["boards:read", "pins:read", "pins:write", "user_accounts:read"];
 
-export function createPinterestAdapter(cfg: { clientId: string; clientSecret: string }, f: typeof fetch = fetch): SocialAdapter {
+export function createPinterestAdapter(cfg: { clientId: string; clientSecret: string; pollMs?: number }, f: typeof fetch = fetch): SocialAdapter {
   const basic = `Basic ${btoa(`${cfg.clientId}:${cfg.clientSecret}`)}`;
   const auth = (t: string) => ({ authorization: `Bearer ${t}` });
   async function token(body: Record<string, string>): Promise<OAuthTokens> {
@@ -27,9 +31,29 @@ export function createPinterestAdapter(cfg: { clientId: string; clientSecret: st
       scopes: (t.scope ?? "").split(/[ ,]+/).filter(Boolean),
     };
   }
+  async function uploadVideo(accessToken: string, url: string, signal: AbortSignal): Promise<string> {
+    const reg = await apiFetch(f, "pinterest", `${API}/media`, { method: "POST", headers: { ...auth(accessToken), "content-type": "application/json" }, body: JSON.stringify({ media_type: "video" }), signal });
+    const m = (await reg.json()) as { media_id?: string; upload_url?: string; upload_parameters?: Record<string, string> };
+    if (!m.media_id || !m.upload_url) throw new PlatformError("permanent", "pinterest media registration returned no upload target");
+    const src = await f(url, { signal });
+    if (!src.ok) throw new PlatformError("retryable", `Could not read media from storage (${src.status})`);
+    const form = new FormData();
+    for (const [k, v] of Object.entries(m.upload_parameters ?? {})) form.append(k, String(v));
+    form.append("file", new Blob([await src.arrayBuffer()]), "video.mp4");
+    const up = await f(m.upload_url, { method: "POST", body: form, signal });
+    if (!up.ok) throw new PlatformError(up.status >= 500 ? "retryable" : "permanent", `pinterest video upload responded ${up.status}`, { status: up.status });
+    for (let i = 0; i < 30; i++) {
+      const r = await apiFetch(f, "pinterest", `${API}/media/${encodeURIComponent(m.media_id)}`, { headers: auth(accessToken), signal });
+      const status = ((await r.json()) as { status?: string }).status?.toLowerCase();
+      if (status === "succeeded") return m.media_id;
+      if (status === "failed") throw new PlatformError("permanent", "pinterest could not process the video");
+      await new Promise((ok) => setTimeout(ok, cfg.pollMs ?? 2000));
+    }
+    throw new PlatformError("retryable", "pinterest video is still processing"); // nothing is published yet, so a retry is safe
+  }
   return {
     platform: "pinterest",
-    capabilities: { ...NO_CAPABILITIES, imagePost: true, tokenRefresh: true, accountAnalytics: true },
+    capabilities: { ...NO_CAPABILITIES, imagePost: true, videoPost: true, tokenRefresh: true, accountAnalytics: true },
     oauth: {
       usesPkce: false,
       authorizationUrl: ({ state, redirectUri }) => `https://www.pinterest.com/oauth/?${new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri, response_type: "code", scope: PINTEREST_SCOPES.join(","), state })}`,
@@ -43,14 +67,21 @@ export function createPinterestAdapter(cfg: { clientId: string; clientSecret: st
       return { externalId: u.username, displayName: u.business_name ?? u.username, username: u.username, ...(u.profile_image ? { avatarUrl: u.profile_image } : {}), accountType: u.account_type === "BUSINESS" ? "business" : "personal", metadata: {} };
     },
     async publish({ accessToken, content, media, signal }) {
-      const image = media.find((m) => m.role === "media");
-      if (!image || image.kind !== "image") throw new PlatformError("permanent", "Pinterest pins here need one image");
+      const main = media.find((m) => m.role === "media");
+      if (!main) throw new PlatformError("permanent", "Pinterest pins need one image or video");
       const boardId = String(content.metadata.boardId ?? "");
       if (!/^\d+$/.test(boardId)) throw new PlatformError("permanent", "metadata.boardId is required");
       const description = withHashtags(content);
+      let media_source: Record<string, string>;
+      if (main.kind === "image") media_source = { source_type: "image_url", url: await main.url() };
+      else {
+        const cover = media.find((m) => m.role === "thumbnail");
+        if (!cover) throw new PlatformError("permanent", "Pinterest video pins need a cover image (thumbnail)");
+        media_source = { source_type: "video_id", media_id: await uploadVideo(accessToken, await main.url(), signal), cover_image_url: await cover.url() };
+      }
       const r = await apiFetch(f, "pinterest", `${API}/pins`, {
         method: "POST", headers: { ...auth(accessToken), "content-type": "application/json" }, signal,
-        body: JSON.stringify({ board_id: boardId, title: content.title ?? description.slice(0, 100), ...(description ? { description } : {}), ...(content.metadata.link ? { link: String(content.metadata.link) } : {}), ...(content.metadata.altText ? { alt_text: String(content.metadata.altText) } : {}), media_source: { source_type: "image_url", url: await image.url() } }),
+        body: JSON.stringify({ board_id: boardId, title: content.title ?? description.slice(0, 100), ...(description ? { description } : {}), ...(content.metadata.link ? { link: String(content.metadata.link) } : {}), ...(content.metadata.altText ? { alt_text: String(content.metadata.altText) } : {}), media_source }),
       }, { creates: true });
       const pin = (await r.json()) as { id?: string };
       if (!pin.id) throw new PlatformError("unknown", "pinterest accepted the pin but returned no id");

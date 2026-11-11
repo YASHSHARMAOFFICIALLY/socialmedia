@@ -79,7 +79,8 @@ Verified: `GET /{user}/accounts` (Pages + Page tokens), `/{page}/feed`, `/{page}
 ### Pinterest  (`PINTEREST_APP_ID/SECRET`)
 Verified (API v5 OpenAPI spec): token endpoint with HTTP Basic; apps activated after 2025-09-25 get a continuous 60-day refresh token.
 - One image pin from a URL; requires `metadata.boardId`. title ≤100, description ≤800, link ≤2048, alt text ≤500.
-- Only metric: `follower_count`. Not implemented: video pins (separate media-upload flow), pin analytics (response shape unconfirmed), reconcile.
+- Only metric: `follower_count`. - Video pin (UNVERIFIED): `POST /v5/media` → multipart upload → poll `GET /v5/media/{id}` → pin with `video_id` + cover (attach an image with role `thumbnail`; required). Endpoints/fields from Pinterest's generated client docs; status values and the cover requirement from third-party/community reports. Not available in the sandbox. File is buffered in memory.
+- Not implemented: pin analytics (response shape unconfirmed), reconcile.
 - GATE: Trial access creates pins visible only to you until Standard access is granted.
 
 ### TikTok  (`TIKTOK_CLIENT_KEY/SECRET`) — UNVERIFIED
@@ -104,7 +105,7 @@ Verified (core.telegram.org/bots/api): `sendMessage` (≤4096), `sendPhoto` / `s
 - 1 media, or an album of 2-10 photos/videos (sendMediaGroup, caption on the first item); plain text (no parse_mode). No reconcile and no post analytics (Bot API has neither); only metric: member count.
 
 ### Deliberately not built
-Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time series, Bluesky video, Pinterest video.
+Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time seriesBluesky video.
 
 ## Competitor intelligence (X, YouTube)
 Public data only, read through the official API with one of your own connected accounts. Instagram (needs Facebook Login) and LinkedIn do not offer this to these integrations → `422 CAPABILITY_UNSUPPORTED`. Competitor analytics are never mixed with your private analytics: comparisons use only publicly visible counts (likes, comments, reposts, quotes). Hidden counts are `null`, not 0.
