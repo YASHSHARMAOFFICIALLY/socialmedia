@@ -34,6 +34,7 @@ const schema = z.object({
   OPS_TOKEN: z.string().min(24).optional(),   // enables GET /health/queues for external monitoring
   DODO_API_KEY: z.string().min(10).optional(),          // enables billing checkout/cancel (secret: never logged)
   DODO_WEBHOOK_KEY: z.string().min(10).optional(),      // Standard Webhooks signing secret (whsec_...)
+  REQUIRE_EMAIL_VERIFICATION: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),   // true = sign-in is refused until the address is verified (verification mail is sent on sign-up either way)
   MEDIA_TRANSFORM_ORIGIN: z.string().url().optional(),   // a zone with Cloudflare Media Transformations enabled (https://<zone>): turns on video re-encoding/downscaling
   NOTIFY_PRODUCER_LAG_S: z.coerce.number().int().min(0).max(86400).default(30),   // events younger than this are not read yet: ids become visible in commit order, and the cursor must not pass a still-open transaction's id
   BILLING_ENFORCE: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),   // plan limits on REST (accounts, seats, posts). MCP always requires its entitlement.

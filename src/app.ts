@@ -65,6 +65,7 @@ import { registerBillingDocs } from "./modules/billing/billing.openapi.js";
 import { createMcpAuth, type McpAuth } from "./modules/mcp/mcp.auth.js";
 import { mcpRoutes } from "./modules/mcp/mcp.routes.js";
 import { registerMcpDocs } from "./modules/mcp/mcp.openapi.js";
+import { createMeService, meRoutes } from "./modules/auth/me.js";
 import { requireAuth } from "./shared/middleware/auth.js";
 import { workspaceRoutes } from "./modules/workspaces/workspace.routes.js";
 import { registerAuthDocs, registerWorkspaceDocs } from "./modules/workspaces/workspace.openapi.js";
@@ -156,6 +157,8 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
   app.post("/workspaces/:workspaceId/invitations", authed, limit({ name: "invite", limit: 20, windowS: 3600 }));
   app.post("/invitations/accept", authed, limit({ name: "invite-accept", limit: 20, windowS: 3600 }));
   app.get("/oauth/:platform/callback", limit({ name: "oauth-callback", limit: 30, windowS: 60 }));
+  app.delete("/me", authed, limit({ name: "account-delete", limit: 5, windowS: 3600 }));
+  app.use(meRoutes(createMeService(db), authed));
   app.use(workspaceRoutes(workspaces, authed));
   app.use(accountRoutes(accounts, authed, { appUrl: cfg.APP_URL }));
   app.use(contentRoutes(content, authed));

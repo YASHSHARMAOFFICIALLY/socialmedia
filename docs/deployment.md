@@ -55,6 +55,7 @@ Then register the OAuth redirect URI `https://<api-host>/oauth/<platform>/callba
 * Turn on **Bot Fight Mode**, enforce HTTPS (HSTS is also sent by the app).
 
 ## Environment variables
+Optional feature switches (all in `.env.example`): `DODO_API_KEY` + `DODO_WEBHOOK_KEY` + `DODO_MODE` (billing; register `https://<api-host>/webhooks/dodo` in Dodo and map each plan price with `PUT /admin/billing/plans/{plan}/prices/{currency}/{interval}/provider-ref`), `BILLING_ENFORCE` (plan limits apply; off by default), `OPS_TOKEN` (enables `/admin/billing/*` and `/health/queues`), `MEDIA_TRANSFORM_ORIGIN` (zone with Cloudflare Media Transformations enabled; turns on video re-encoding), `REQUIRE_EMAIL_VERIFICATION`, `NOTIFY_PRODUCER_LAG_S`. Upload clients must send the headers returned by the upload endpoint (they include `If-None-Match: *`).
 See `.env.example` for every variable. Required for a working deployment: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `TOKEN_ENC_KEYS`, `CORS_ORIGINS`, `APP_URL`, plus at least one platform's credentials. Key rotation: prepend a new key (`2:<new>,1:<old>`), deploy, later drop the old one after re-encryption has been verified (re-encryption job is not implemented: old keys must stay until all tokens are refreshed/re-linked).
 
 ## Operations

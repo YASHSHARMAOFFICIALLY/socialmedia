@@ -34,9 +34,14 @@ export function createAuth(db: Db, cfg: Config, mailer: Mailer) {
       minPasswordLength: 10,
       maxPasswordLength: 128,
       revokeSessionsOnPasswordReset: true,
+      requireEmailVerification: cfg.REQUIRE_EMAIL_VERIFICATION,
       sendResetPassword: async ({ user, url }) => {
         await mailer.send({ to: user.email, subject: "Reset your password", html: `<p><a href="${url}">Reset password</a> (expires soon)</p>` });
       },
+    },
+    emailVerification: {
+      sendOnSignUp: true, autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => { await mailer.send({ to: user.email, subject: "Verify your email", html: `<p><a href="${url}">Verify your email address</a></p>` }); },
     },
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     // Behind Cloudflare the real client address is cf-connecting-ip. Counters live in Postgres so they hold across isolates.

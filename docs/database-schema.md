@@ -37,10 +37,14 @@ posts ─ campaign_posts >─ campaigns        posts ─< approval_requests ─<
 * Credentials, invitation tokens and OAuth state are stored only as ciphertext/hashes.
 * Indexes follow the actual queries; `test/reliability.test.ts` replays the application's real statements through `EXPLAIN` with sequential scans disabled and fails if any growing table would need a full scan (it proves an index path exists; it does not prove selectivity at production data volumes → load test on Neon before launch).
 
-## Billing and MCP (migrations 0022-0024)
+## Billing and MCP (migrations 0022-0028)
 - `billing_plans` / `billing_plan_versions` / `billing_prices` / `billing_entitlements`: immutable catalog (prices in integer minor units, `provider_refs` mutable). Seeded Free/Starter/Pro/Agency with PLACEHOLDER values.
 - `billing_subscriptions`: unique live row per workspace; unique `(provider, provider_subscription_id)`.
 - `billing_usage_events`: immutable, unique `(workspace_id, idempotency_key)`.
 - `billing_webhook_events`: unique `(provider, event_id)`; `billing_payments`: unique `(provider, provider_payment_id, status)`.
 - `mcp_grants` (+ `mcp_access_tokens`, `mcp_device_codes`): hashed credentials only (SHA-256); access tokens cascade-delete with their grant.
+- `mcp_grants.old_refresh_hashes` / `rotated_at` (0024): rotation history for refresh-token theft detection with a 120 s concurrency grace; `kind` also `oauth` (0027).
+- `mcp_clients` / `mcp_auth_codes` (0027): dynamic OAuth clients (exact redirect URIs) and single-use 60 s authorization codes, hashed.
+- `export_jobs.started_at` (0025): lease for re-claiming stuck exports. `billing_subscriptions.synced_at` (0026): last confirmation with the provider (daily safety-net re-sync).
+- `analytics_audience` (0028): latest audience demographics per account/kind/breakdown (jsonb distribution); day-period account metrics live in `analytics_metrics` with `period = 'day'`.
 See docs/billing.md and docs/mcp.md.
