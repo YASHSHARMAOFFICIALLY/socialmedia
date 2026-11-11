@@ -16,6 +16,7 @@ Machine-readable: `GET /openapi.json`; interactive: `GET /docs` (Swagger UI load
 |---|---|
 | Auth | register, login, logout, sessions |
 | Workspaces | create/list/update, members + roles, invitations, audit log |
+| Workspace deletion | `DELETE /workspaces/{id}` `{confirmName}`: owner only, permanent (accounts and their encrypted credentials, posts, jobs, analytics, MCP grants); refused with 409 `ACTIVE_SUBSCRIPTION` while a paid subscription is live. Tokens are deleted on our side; revoke the app on each platform if you also want it removed there |
 | Social accounts | `GET /platforms` (verified capabilities; `connect`: `"oauth"`\|`"credentials"`\|`null`; `fields` for credentials platforms), connect (returns authorization URL), `POST …/accounts/connect-credentials {platform, fields}` (Bluesky `identifier`+`appPassword`, Mastodon `instance`+`accessToken`, Telegram `botToken`+`chat`), OAuth callback (returns an array when it connected several accounts, e.g. one per Facebook Page), list/disconnect/refresh |
 | Content | drafts, per-account variants, duplicate, `POST …/validate` (errors, unverified-rule warnings, publish blockers) |
 | Publishing | publish now, status/history (`/publications`), cancel, retry |

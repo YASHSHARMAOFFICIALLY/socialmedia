@@ -124,3 +124,35 @@ describe("workspaces, RBAC and isolation", async () => {
     expect(p2.meta.nextCursor).toBeNull();
   });
 });
+
+describe("workspace deletion", async () => {
+  const { createFakeAdapter, ok } = await import("./helpers/fake-adapter.js");
+  const { createTestApp } = await import("./helpers/app.js");
+  const { world, publish, drain } = await import("./helpers/world.js");
+  const t = await createTestApp([createFakeAdapter("linkedin", () => ok()).adapter]);
+  afterAll(t.close);
+
+  it("owner deletes a fully populated workspace (accounts, credentials, posts, jobs, grants) after typing its name; others cannot", async () => {
+    const { owner, ws, post } = await world(t, ["linkedin"]);
+    await publish(owner, ws, post); await drain(t);
+    await owner.agent.post(`/workspaces/${ws}/mcp/tokens`).send({ name: "ci" });
+    const name = (await owner.agent.get(`/workspaces/${ws}`)).body.data.name as string;
+    const admin = await t.newUser("adm");
+    await t.db.query("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,'admin')", [ws, admin.id]);
+    expect((await admin.agent.delete(`/workspaces/${ws}`).send({ confirmName: name })).status).toBe(403);
+    expect((await owner.agent.delete(`/workspaces/${ws}`).send({ confirmName: "wrong" })).status).toBe(400);
+    expect((await owner.agent.delete(`/workspaces/${ws}`).send({ confirmName: name })).status).toBe(204);
+    expect((await owner.agent.get(`/workspaces/${ws}`)).status).toBe(404);
+    for (const table of ["social_accounts", "posts", "publishing_jobs", "oauth_credentials", "mcp_grants"]) expect((await t.db.query(`SELECT 1 FROM ${table} WHERE workspace_id = $1`, [ws])).rowCount, table).toBe(0);
+    expect((await t.db.query("SELECT 1 FROM audit_logs WHERE action = 'workspace.deleted' AND entity_id = $1", [ws])).rowCount).toBe(1);
+  });
+
+  it("refuses while a paid subscription is live", async () => {
+    const { owner, ws } = await world(t, ["linkedin"]);
+    await t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'pro'", [ws]);
+    const name = (await owner.agent.get(`/workspaces/${ws}`)).body.data.name as string;
+    const r = await owner.agent.delete(`/workspaces/${ws}`).send({ confirmName: name });
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe("ACTIVE_SUBSCRIPTION");
+  });
+});

@@ -27,6 +27,11 @@ export function workspaceRoutes(svc: WorkspaceService, authn: RequestHandler) {
     res.json({ data: await svc.update(actor(req), p(req).workspaceId, req.body) });
   });
 
+  r.delete("/workspaces/:workspaceId", validate({ params: s.idParam, body: s.deleteWorkspaceBody }), async (req, res) => {
+    await svc.remove(actor(req), p(req).workspaceId, req.body.confirmName);
+    res.status(204).end();
+  });
+
   r.get("/workspaces/:workspaceId/members", validate({ params: s.idParam }), async (req, res) => {
     res.json({ data: await svc.listMembers(actor(req), p(req).workspaceId) });
   });
