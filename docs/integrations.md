@@ -105,7 +105,7 @@ Verified (core.telegram.org/bots/api): `sendMessage` (≤4096), `sendPhoto` / `s
 - 1 media, or an album of 2-10 photos/videos (sendMediaGroup, caption on the first item); plain text (no parse_mode). No reconcile and no post analytics (Bot API has neither); only metric: member count.
 
 ### Deliberately not built
-Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time seriesBluesky video.
+Reddit (commercial API approval), Snapchat (no organic posting API), WhatsApp and Discord (messaging, not social posting), Tumblr (optional later). Also not built: competitors beyond X/YouTube, LinkedIn analytics/org posting, video transcoding, X threads/polls, Instagram account time series, Bluesky video.
 
 ## Competitor intelligence (X, YouTube)
 Public data only, read through the official API with one of your own connected accounts. Instagram (needs Facebook Login) and LinkedIn do not offer this to these integrations → `422 CAPABILITY_UNSUPPORTED`. Competitor analytics are never mixed with your private analytics: comparisons use only publicly visible counts (likes, comments, reposts, quotes). Hidden counts are `null`, not 0.
