@@ -50,7 +50,7 @@
 - Calendar API (month / weekOf / range<=62 days, grouped by local day, filters, unscheduled drafts)
 - Media: SigV4 presigned R2 URLs (verified against the AWS test vector), upload -> confirm (size + magic-byte MIME sniff + image dimensions), library with usage counts, per-platform compatibility endpoint, abandoned-upload cleanup, in-use protection
 - Bulk create/schedule/cancel/status with per-item results (each item independent)
-- Still NOT implemented / blocked: LinkedIn analytics (partner approval), Instagram account insights time series + demographics, video transcoding/compression (needs Cloudflare Stream or Media Transformations), video in Instagram carousels, Shorts-specific handling, YouTube `publishAt`, X threads/polls, LinkedIn org posting (approval).
+- Not built here: see "Not built (and why)" at the end (X threads, YouTube `publishAt` and Instagram video carousels were added later).
 
 ## Phase 8 — Analytics engine: DONE (mocked-API tests; not run against live platform metrics)
 - Collection: separate Cloudflare Queue + cron seeding (`analytics_targets`: one per account, one per published post on platforms with analytics). Cadence by post age (1h/6h/24h/7d, stop at 90d), accounts daily. Claim lease prevents concurrent collection. Failures only touch the target (rate limit wait, backoff, disable after 5 permanent): publishing is untouched (tested byte-for-byte).
@@ -61,7 +61,7 @@
 - Cross-platform totals ONLY for metrics flagged comparable (likes, comments, followers, interactions) and always with per-platform values + caveat; views/impressions/reach/shares/... are never summed across platforms; ranking across platforms refuses non-comparable metrics.
 - API: overview, platform, account, post, trends (day/week/month), followers growth, platform comparison, range comparison, top posts, metric definitions. Responses cached (KV or memory) with a per-workspace data-version key, so new data invalidates automatically.
 - Verified from official docs: X public_metrics fields; YouTube videos/channels statistics; Instagram media insights metrics + `instagram_business_manage_insights` (Instagram scopes now include it: existing connections must re-authorize).
-- Not implemented / blocked: LinkedIn analytics (partner approval), X non-public metrics (user-context auth), YouTube Analytics API (watch time/audience), Instagram account insights time series and demographics, per-day platform-reported series (`period=day`) -- we derive deltas from lifetime counters instead.
+- Not built: see "Not built (and why)" at the end.
 
 ## Phase 9 — Campaigns, insights, approvals, notifications, reports: DONE
 - Campaigns: CRUD, posts (at most one campaign each; moves are reported), publishing status per platform, performance (platform contribution, comparable totals only, interactions trend), campaign comparison
@@ -69,7 +69,7 @@
 - Approvals (Writer -> Reviewer -> Publisher): optional per-workspace policy, N approvals, no self-approval, one vote per reviewer, content fingerprint (edits make an approval stale/outdated), gate inside the publish/schedule transaction
 - Notifications: in-app + email (Resend, async via outbox with backoff, gives up after 5), per-type preferences, producers read domain events with a cursor so they can never block or roll back publishing; reauth/expiring-connection alerts; HTML-escaped emails
 - Reports: asynchronous CSV exports (post / account / campaign / platform comparison / historical), RFC 4180 + formula-injection guard, empty cell = unavailable, 7-day retention, `reports:export` permission. PDF not implemented (planned).
-- Webhook notifications: NOT implemented (channel seam only).
+- Webhook notifications: built later (outbound webhooks with HMAC signing, retries, SSRF guard).
 
 ## Phase 10 — Hardening and deployment: DONE (code, tests, docs). NOT deployed.
 - Security: Postgres-backed rate limiter on abuse-prone endpoints (fails open on DB outage) + Better Auth database rate limits (sign-in 5/min, sign-up 10/h, ...); Origin guard against cross-site state changes; `Cache-Control: no-store` on API responses; body-parser errors map to 413/400 (found by the sweep); media endpoints authorize before revealing configuration (found by the sweep).
@@ -119,7 +119,7 @@ Not verified: real workerd + Neon/Hyperdrive end-to-end; real Cloudflare Queues/
 - **Workers Paid plan required** (Free = 10 ms CPU). Worker startup time (<1 s limit) is unmeasured.
 - **External approval gates**: Meta App Review (Instagram publish/insights), LinkedIn Community Management API (org posting, analytics), X paid API tier, Google production OAuth consent. LinkedIn and unconfirmed-outcome cases cannot be auto-reconciled.
 - Instagram connections made before analytics existed must re-authorize (new `instagram_business_manage_insights` scope); Instagram tokens expire if unused for 60 days (a keep-alive refresh job is not implemented).
-- Not implemented: recurring posts (column reserved), webhook notifications and platform webhook ingestion (`webhook_events`), PDF reports, competitor intelligence, AI content adaptation provider, image/video processing (resize/transcode; video duration/dimension extraction), YouTube Analytics API / thumbnails / Shorts handling, X non-public metrics, token re-encryption job after key rotation, `npm run test:live`.
+- Built since this note was written: recurring posts, outbound/inbound webhooks, PDF reports, competitor intelligence, AI adaptation, image derivatives, MP4 duration/dimension extraction, thumbnails, token re-encryption job, Instagram keep-alive, `npm run test:live`. Still not built: see "Not built (and why)" at the end.
 - Index audit proves an index path exists, not selectivity at scale: load test on Neon with realistic volumes.
 - Cache: KV (when bound) is eventually consistent; entries are keyed by data version so staleness is bounded by the 5-minute TTL.
 
@@ -132,3 +132,12 @@ Not verified: real workerd + Neon/Hyperdrive end-to-end; real Cloudflare Queues/
 Fixed, each with a test that fails when reverted: microsecond-safe keyset cursors (`PgDate`, pagination); OAuth callback bound to the initiating user; a DB error after a successful platform publish now goes to reconciliation, never `failed`; per-token MCP rate limit answers 429; device-flow approval needs `mcp:manage` and defaults to non-portal scopes; refresh tokens keep a rotated-token history with a 120 s concurrency grace (migration 0024), CLI adopts tokens rotated by another process and clears credentials only on `invalid_grant`, CLI only auto-opens same-origin links; portal MCP tool is not `readOnlyHint`; billing: the provider's product decides the plan (stale checkout tab, portal plan change), unmapped PAID subscriptions fail loudly and `ignored` events can be retried by ops, provider state re-read under the row lock; `posts_per_month` counts accepted-but-unpublished jobs (workspace row lock) and reconciled publishes are metered; connected-account limit re-checked per account in the OAuth callback; only `ready` media can be attached; unavailable followers no longer read as 0; a post's first trend bucket counts its whole value; pino `err` serialization on Workers; export re-claim uses `started_at` (migration 0025); `/health/ready` no longer echoes DB errors; MCP dates are validated as real dates.
 Second pass (also fixed): `analytics_history_days` enforced when `BILLING_ENFORCE=true`; notification producer waits `NOTIFY_PRODUCER_LAG_S` (default 30) so it cannot pass a still-open transaction's event id; daily provider re-sync of live subscriptions (migration 0026, `synced_at`); upload URLs are create-only (`If-None-Match: *` is signed; clients must send the returned headers) so verified bytes cannot be replaced; webhook delivery claim window 15 min; Instagram `signed_request` rejected when `issued_at` is older than a day; macOS keychain write goes through `security -i` stdin (no secret in argv).
 Still open: none from the review. Unverified in real environments: Dodo sandbox, workerd `/mcp`, Workers pino output, R2 honouring `If-None-Match` on presigned PUT.
+
+## Not built (and why)
+Built since: MCP browser OAuth (authorization code + PKCE, dynamic client registration), X threads (`metadata.thread`), YouTube `publishAt`, Instagram carousels with video.
+- LinkedIn analytics and organization posting: need the Community Management API (partner approval).
+- X non-public metrics: need user-context OAuth with the paid tier. X polls: not built (low demand; add as `metadata.poll` when wanted).
+- Instagram account insights time series and demographics: needs period-day storage (aggregates are lifetime-counter based) and the exact Graph API shapes verified in a real account; deliberately not guessed.
+- Video transcoding/compression: needs Cloudflare Stream or Media Transformations (an account-level product), not code.
+- Billing/admin UI: out of scope (backend only, by decision).
+- Everything in "Unverified in real environments" above.
