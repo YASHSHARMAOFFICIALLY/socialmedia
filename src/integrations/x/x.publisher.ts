@@ -48,7 +48,7 @@ export function createXPublisher(f: typeof fetch = fetch, o: { pollMs?: number }
     const res = await platformFetch(f, "x", `${API}/tweets`, {
       method: "POST", signal: i.signal,
       headers: { Authorization: `Bearer ${i.accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ text: withHashtags(i.content), ...(ids.length ? { media: { media_ids: ids } } : {}) }),
+      body: JSON.stringify({ text: withHashtags(i.content), ...(ids.length ? { media: { media_ids: ids } } : {}), ...(i.content.metadata.poll ? { poll: { options: (i.content.metadata.poll as { options: string[] }).options, duration_minutes: (i.content.metadata.poll as { durationMinutes: number }).durationMinutes } } : {}) }),
     }, { creates: true });
     const id = ((await res.json().catch(() => null)) as { data?: { id?: string } } | null)?.data?.id;
     if (!id) throw new PlatformError("unknown", "x accepted the post but returned no id");

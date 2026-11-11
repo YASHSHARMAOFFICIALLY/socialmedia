@@ -22,6 +22,14 @@ export const xRules: ContentRules = {
       if (!Array.isArray(t) || t.length === 0 || t.length > 24 || t.some((x) => typeof x !== "string" || !x.trim())) issues.push({ code: "THREAD_INVALID", field: "metadata", severity: "error", message: "metadata.thread must be 1 to 24 non-empty strings" });
       else t.forEach((x, i) => { if (!long && weighted(x as string) > 280) issues.push({ code: "TEXT_TOO_LONG", field: "metadata", severity: "error", message: `Thread tweet ${i + 2} is ${weighted(x as string)} characters (approximate); the limit is 280` }); });
     }
+    // Poll: metadata.poll = { options: 2-4 strings (<=25 chars), durationMinutes: 5..10080 }. Cannot be combined with media.
+    if (c.metadata.poll !== undefined) {
+      const p = c.metadata.poll as { options?: unknown; durationMinutes?: unknown } | null;
+      const opts = p && Array.isArray(p.options) ? p.options : null;
+      if (!opts || opts.length < 2 || opts.length > 4 || opts.some((o) => typeof o !== "string" || !o.trim() || chars(o) > 25)) issues.push({ code: "POLL_INVALID", field: "metadata", severity: "error", message: "metadata.poll.options must be 2 to 4 choices of at most 25 characters" });
+      if (!p || !Number.isInteger(p.durationMinutes) || (p.durationMinutes as number) < 5 || (p.durationMinutes as number) > 10080) issues.push({ code: "POLL_DURATION", field: "metadata", severity: "error", message: "metadata.poll.durationMinutes must be a whole number from 5 to 10080" });
+      if (mediaOnly(c).length > 0) issues.push({ code: "POLL_WITH_MEDIA", field: "media", severity: "error", message: "A poll cannot be combined with media" });
+    }
     const media = mediaOnly(c);
     const videos = media.filter((m) => m.kind === "video"), images = media.filter((m) => m.kind === "image");
     const gifs = images.filter((m) => m.mimeType === "image/gif");

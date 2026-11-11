@@ -93,6 +93,18 @@ describe("X adapter (mocked API)", () => {
     expect(r2.warnings?.[0]).toMatch(/NOT posted/);
   });
 
+  it("polls: sent as poll.options + duration_minutes; rules enforce 2-4 short options, 5-10080 minutes, no media", async () => {
+    const h = harness(() => Response.json({ data: { id: "P1" } }, { status: 201 }));
+    await ad(h.f).publish!(input(content({ metadata: { poll: { options: ["a", "b"], durationMinutes: 60 } } })));
+    expect((h.calls[0]!.body as { poll: unknown }).poll).toEqual({ options: ["a", "b"], duration_minutes: 60 });
+    const codes = (poll: unknown, media: unknown[] = []) => xRules.validate(content({ media: media as never, metadata: { poll } })).map((x) => x.code);
+    expect(codes({ options: ["a", "b"], durationMinutes: 60 })).toEqual([]);
+    expect(codes({ options: ["a"], durationMinutes: 60 })).toContain("POLL_INVALID");
+    expect(codes({ options: ["a", "x".repeat(26)], durationMinutes: 60 })).toContain("POLL_INVALID");
+    expect(codes({ options: ["a", "b"], durationMinutes: 1 })).toContain("POLL_DURATION");
+    expect(codes({ options: ["a", "b"], durationMinutes: 60 }, [{ kind: "image", role: "media", mimeType: "image/jpeg", sizeBytes: 1 }])).toContain("POLL_WITH_MEDIA");
+  });
+
   it("thread rules: 1-24 non-empty tweets of at most 280 characters", () => {
     const rules = xRules;
     const codes = (thread: unknown) => rules.validate(content({ metadata: { thread } })).map((x) => x.code);
