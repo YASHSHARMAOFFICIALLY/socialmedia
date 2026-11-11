@@ -19,7 +19,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 
 export interface NotifyInput { workspaceId: string; userIds: string[]; type: NotificationType; title: string; body: string; data?: object; ref: string }
 
-export function createNotificationService(deps: { db: Db; workspaces: WorkspaceService; mailer: Mailer; log: Logger; appUrl?: string | undefined; webhooks?: WebhookEmitter | undefined }) {
+export function createNotificationService(deps: { db: Db; workspaces: WorkspaceService; mailer: Mailer; log: Logger; appUrl?: string | undefined; webhooks?: WebhookEmitter | undefined; producerLagS?: number }) {
   const { db, workspaces } = deps;
 
   /** Idempotent per (user, type, ref). In-app row immediately; email goes through the outbox and is delivered asynchronously. */
@@ -75,7 +75,7 @@ export function createNotificationService(deps: { db: Db; workspaces: WorkspaceS
     async produceFromPublishing() {
       return db.tx(async (q) => {
         const cursor = await repo.cursor(q, "publishing_events");
-        const { maxId, events } = await repo.publishingOutcomes(q, cursor, 500);
+        const { maxId, events } = await repo.publishingOutcomes(q, cursor, 500, deps.producerLagS ?? 30);
         for (const e of events) {
           const what = e.title || e.preview || "your post";
           if (e.to_status === "published")

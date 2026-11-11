@@ -84,7 +84,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
   const media = createMediaService({ db, workspaces, storage, rules: contentRules, images: o.images !== undefined ? o.images : typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair !== "undefined" ? cloudflareImageTransformer() : null });
   // Platforms (Instagram in particular) download media from a URL: hand them a time-limited signed GET URL.
   const engineDeps: EngineDeps = { db, log, registry, accounts, content, ...(storage ? { mediaUrl: (key: string) => storage.presignGet(key, 3600) } : {}), ...o.engine };
-  const notifications = createNotificationService({ db, workspaces, mailer, log, appUrl: cfg.APP_URL, webhooks: webhooks.emitter });
+  const notifications = createNotificationService({ db, workspaces, mailer, log, appUrl: cfg.APP_URL, webhooks: webhooks.emitter, producerLagS: cfg.NOTIFY_PRODUCER_LAG_S });
   const approvals = createApprovalService({ db, workspaces, content, notifications });
   const publishing = createPublishingService({ db, workspaces, content, log, gate, kick: () => dispatchOutbox(engineDeps, o.queue), approvalGate: approvals });
   const engine = {
@@ -105,7 +105,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
     billing: { sweep: () => billingPayments.sweep(), purge: () => billingPayments.purge() },
     tokens: { keepAlive: () => accounts.keepAlive(), reencryptStale: () => accounts.reencryptStale() },
   };
-  const analytics = createAnalyticsService({ db, workspaces, registry, cache: o.cache ?? createMemoryCache() });
+  const analytics = createAnalyticsService({ db, workspaces, registry, cache: o.cache ?? createMemoryCache(), ...(cfg.BILLING_ENFORCE ? { historyDays: async (ws: string) => (await billing.check(ws, "analytics_history_days")).limit } : {}) });
   const reports = createReportService({ db, workspaces, analytics, log });
   const scheduling = createSchedulingService({ db, workspaces, publishing, content });
   const competitors = createCompetitorService({ db, workspaces, registry, accounts, log });

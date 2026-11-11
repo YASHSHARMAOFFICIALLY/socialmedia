@@ -126,3 +126,16 @@ describe("notifications", async () => {
     expect((await admin.agent.get(`/workspaces/${w.ws}/notifications`)).body.meta.unread).toBe(1);
   });
 });
+
+describe("notification producer lag", async () => {
+  const t = await createTestApp([createFakeAdapter("linkedin", () => ok()).adapter], { env: { NOTIFY_PRODUCER_LAG_S: "3600" } });
+  afterAll(t.close);
+  it("does not read events younger than the lag (a still-open transaction's lower id could otherwise be skipped forever), then picks them up", async () => {
+    const w = await world(t, ["linkedin"]);
+    await publish(w.owner, w.ws, w.post);
+    await drain(t);
+    expect((await t.deps.engine.notifications.sweep()).published).toBe(0);
+    await t.db.query("UPDATE publishing_events SET created_at = now() - interval '2 hours'");
+    expect((await t.deps.engine.notifications.sweep()).published).toBe(1);
+  });
+});

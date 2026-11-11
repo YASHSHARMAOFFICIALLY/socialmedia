@@ -26,7 +26,7 @@ export async function createTestApp(adapters: SocialAdapter[] = [], o: { engine?
   await migrate(created.db);
   const sent: { to: string; subject: string; html: string }[] = [];
   const mailer: Mailer = o.mailer ?? { send: async (m) => void sent.push(m) };
-  const cfg = loadConfig({ NODE_ENV: "test", BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-123", BETTER_AUTH_URL: ORIGIN, APP_URL: ORIGIN, TOKEN_ENC_KEYS: TEST_KEYS, ...o.env });
+  const cfg = loadConfig({ NODE_ENV: "test", BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-123", BETTER_AUTH_URL: ORIGIN, APP_URL: ORIGIN, TOKEN_ENC_KEYS: TEST_KEYS, NOTIFY_PRODUCER_LAG_S: "0", ...o.env });
   const log = pino({ level: "silent" });
   const mq = createMemoryQueue();
   const queue = { sendBatch: async (m: { jobId: string }[]) => { if (o.queueFails?.()) throw new Error("queue down"); await mq.queue.sendBatch(m); } };

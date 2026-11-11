@@ -18,7 +18,7 @@ export function createR2Storage(cfg: R2Config, f: typeof fetch = fetch): ObjectS
   const url = (key: string) => `https://${cfg.accountId}.r2.cloudflarestorage.com/${cfg.bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
   return {
     async presignPut(key, { contentType, expiresS }) {
-      return { url: await presignUrl(creds, "PUT", url(key), expiresS, { signedHeaders: { "content-type": contentType } }), headers: { "Content-Type": contentType } };
+      return { url: await presignUrl(creds, "PUT", url(key), expiresS, { signedHeaders: { "content-type": contentType, "if-none-match": "*" } }), headers: { "Content-Type": contentType, "If-None-Match": "*" } };   // create-only: the URL cannot overwrite an object after confirm verified it
     },
     presignGet: (key, expiresS) => presignUrl(creds, "GET", url(key), expiresS),
     async head(key) {

@@ -63,7 +63,7 @@ export function createReportService(deps: { db: Db; workspaces: WorkspaceService
     /** Produces queued exports. Each runs in isolation; a failure marks only that export failed (with a safe message). */
     async sweep(limit = 3) {
       const claimed = (await db.tx(async (q) => q.query<Row & { workspace_id: string }>(
-        `UPDATE export_jobs SET status = 'running' WHERE id IN (SELECT id FROM export_jobs WHERE status = 'queued' OR (status = 'running' AND created_at < now() - interval '15 minutes') ORDER BY created_at LIMIT $1 FOR UPDATE SKIP LOCKED) RETURNING ${COLS}, workspace_id`, [limit]))).rows;
+        `UPDATE export_jobs SET status = 'running', started_at = now() WHERE id IN (SELECT id FROM export_jobs WHERE status = 'queued' OR (status = 'running' AND COALESCE(started_at, created_at) < now() - interval '15 minutes') ORDER BY created_at LIMIT $1 FOR UPDATE SKIP LOCKED) RETURNING ${COLS}, workspace_id`, [limit]))).rows;
       let done = 0;
       for (const j of claimed) {
         try {
@@ -71,12 +71,12 @@ export function createReportService(deps: { db: Db; workspaces: WorkspaceService
           const max = j.format === "pdf" ? PDF_MAX_ROWS : MAX_ROWS;
           if (t.rows.length > max) throw new AppError(422, "TOO_MANY_ROWS", `The export has more than ${max} rows; narrow the date range or filters${j.format === "pdf" ? " (or use CSV)" : ""}`);
           const title = `${j.type.replace(/_/g, " ")} (${j.params.from} to ${j.params.to})`;
-          await db.query("UPDATE export_jobs SET status = 'done', row_count = $2, result_csv = $3, result_b64 = $4, finished_at = now(), error = NULL WHERE id = $1",
+          await db.query("UPDATE export_jobs SET status = 'done', row_count = $2, result_csv = $3, result_b64 = $4, finished_at = now(), error = NULL WHERE id = $1 AND status = 'running'",
             [j.id, t.rows.length, j.format === "csv" ? toCsv(t.header, t.rows) : null, j.format === "pdf" ? toPdf(title, `Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC. Empty cells mean the value was not available.`, t.header, t.rows).toString("base64") : null]);
           done++;
         } catch (e) {
           deps.log.error({ err: e, exportId: j.id }, "report generation failed");
-          await db.query("UPDATE export_jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1", [j.id, e instanceof AppError ? e.message : "The report could not be generated"]);
+          await db.query("UPDATE export_jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1 AND status = 'running'", [j.id, e instanceof AppError ? e.message : "The report could not be generated"]);
         }
       }
       return { claimed: claimed.length, done };

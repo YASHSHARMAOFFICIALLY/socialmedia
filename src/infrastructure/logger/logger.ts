@@ -14,8 +14,10 @@ export function createLogger(cfg: Pick<Config, "LOG_LEVEL">) {
   return pino({
     level: cfg.LOG_LEVEL,
     redact: { paths: redactPaths, censor: "[REDACTED]" },
+    serializers: { err: pino.stdSerializers.err },
     // Workers bundle pino's browser build: route JSON lines to console (Workers Logs picks them up).
-    browser: { asObject: true, write: (o) => console.log(JSON.stringify(o)) },
+    // `serialize: true` is required there, otherwise serializers are skipped and an Error logs as {} (no message, no stack).
+    browser: { asObject: true, serialize: true, write: (o) => console.log(JSON.stringify(o)) },
   });
 }
 export type Logger = pino.Logger;

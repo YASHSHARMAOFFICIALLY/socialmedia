@@ -107,8 +107,8 @@ export function createWebhookService(deps: { db: Db; workspaces: WorkspaceServic
     // ---- background delivery
     async sweep(limit = 25) {
       const due = (await db.tx((q) => q.query<{ id: string; endpoint_id: string; payload: unknown; attempts: number; url: string; secret_enc: string; workspace_id: string; event_type: string; failure_streak: number }>(
-        // claim with a 5-minute visibility window so overlapping sweeps never deliver the same event twice
-        `UPDATE webhook_deliveries d SET next_attempt_at = now() + interval '5 minutes' FROM webhook_endpoints e
+        // claim with a visibility window longer than a full batch (25 x 10 s timeout) so overlapping sweeps never deliver the same event twice
+        `UPDATE webhook_deliveries d SET next_attempt_at = now() + interval '15 minutes' FROM webhook_endpoints e
           WHERE d.id IN (SELECT id FROM webhook_deliveries WHERE status = 'pending' AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT $1 FOR UPDATE SKIP LOCKED) AND e.id = d.endpoint_id
           RETURNING d.id, d.endpoint_id, d.payload, d.attempts, e.url, e.secret_enc, d.workspace_id, d.event_type, e.failure_streak`, [limit]))).rows;
       let delivered = 0, failed = 0;

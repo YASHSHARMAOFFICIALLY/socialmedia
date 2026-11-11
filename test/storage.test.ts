@@ -16,10 +16,10 @@ describe("SigV4 presigning", () => {
     const u = new URL(put.url);
     expect(u.host).toBe("acc.r2.cloudflarestorage.com");
     expect(u.pathname).toBe("/media/ws1/a%20b/file.jpg");
-    expect(u.searchParams.get("X-Amz-SignedHeaders")).toBe("content-type;host");
+    expect(u.searchParams.get("X-Amz-SignedHeaders")).toBe("content-type;host;if-none-match");   // create-only upload: cannot replace verified bytes
     expect(u.searchParams.get("X-Amz-Credential")).toContain("/auto/s3/aws4_request");
     expect(u.searchParams.get("X-Amz-Expires")).toBe("600");
-    expect(put.headers).toEqual({ "Content-Type": "image/jpeg" });
+    expect(put.headers).toEqual({ "Content-Type": "image/jpeg", "If-None-Match": "*" });
     expect(new URL(await st.presignGet("k", 60)).searchParams.get("X-Amz-SignedHeaders")).toBe("host");
   });
   it("signed HEAD/GET/DELETE requests carry an Authorization header and treat 404 correctly", async () => {

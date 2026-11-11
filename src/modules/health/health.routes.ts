@@ -6,7 +6,7 @@ import { workerStatus } from "../../workers/heartbeat.js";
 const withTimeout = <T>(p: Promise<T>, ms = 3000) =>
   Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 
-const safeEq = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const safeEq = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };   // byte lengths: non-ASCII input must not throw
 
 export function healthRoutes(deps: { db: Db; opsToken?: string | undefined }) {
   const r = Router();
@@ -18,8 +18,8 @@ export function healthRoutes(deps: { db: Db; opsToken?: string | undefined }) {
     try {
       await withTimeout(deps.db.query("SELECT 1"));
       res.json({ data: { status: "ok", checks: { db: { ok: true, ms: Date.now() - t } } } });
-    } catch (e) {
-      res.status(503).json({ data: { status: "degraded", checks: { db: { ok: false, ms: Date.now() - t, error: (e as Error).message } } } });
+    } catch {
+      res.status(503).json({ data: { status: "degraded", checks: { db: { ok: false, ms: Date.now() - t } } } });
     }
   });
   // Informational: scheduled/queue handlers heartbeat into Postgres.

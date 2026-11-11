@@ -33,8 +33,8 @@ export const notificationRepository = {
   // ---- producers (cursor based: they read domain events and never run inside publishing transactions)
   cursor: async (q: Queryable, name: string) => Number((await q.query<{ last_id: string }>("SELECT last_id::text FROM notification_cursors WHERE name = $1", [name])).rows[0]?.last_id ?? 0),
   setCursor: (q: Queryable, name: string, id: number) => q.query("INSERT INTO notification_cursors (name, last_id) VALUES ($1,$2) ON CONFLICT (name) DO UPDATE SET last_id = EXCLUDED.last_id", [name, id]),
-  publishingOutcomes: async (q: Queryable, after: number, window: number) => {
-    const ids = (await q.query<{ id: string }>("SELECT id::text FROM publishing_events WHERE id > $1 ORDER BY id LIMIT $2", [after, window])).rows.map((r) => Number(r.id));
+  publishingOutcomes: async (q: Queryable, after: number, window: number, lagS: number) => {
+    const ids = (await q.query<{ id: string }>("SELECT id::text FROM publishing_events WHERE id > $1 AND created_at <= now() - make_interval(secs => $3) ORDER BY id LIMIT $2", [after, window, lagS])).rows.map((r) => Number(r.id));
     if (!ids.length) return { maxId: after, events: [] };
     const events = (await q.query<{ id: string; job_id: string; workspace_id: string; to_status: string; created_by: string; platform: string; external_url: string | null; failure_kind: string | null; failure_message: string | null; title: string | null; preview: string }>(
       `SELECT e.id::text, e.job_id, e.workspace_id, e.to_status, j.created_by, j.platform, j.external_url, j.failure_kind, j.failure_message, p.title, left(p.body, 80) AS preview

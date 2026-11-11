@@ -14,11 +14,16 @@ export function verifyBodySignature(raw: Buffer, header: string | undefined, sec
   const m = /^sha256=([0-9a-f]{64})$/.exec(header ?? "");
   return !!m && eq(Buffer.from(m[1]!, "hex"), createHmac("sha256", secret).update(raw).digest());
 }
-export function parseSignedRequest(signed: string, secret: string): { user_id?: string } | null {
+const SIGNED_MAX_AGE_S = 86_400;   // Meta sends these immediately; an old captured request must not be replayable
+export function parseSignedRequest(signed: string, secret: string, nowS = Math.floor(Date.now() / 1000)): { user_id?: string } | null {
   const [sig, payload] = signed.split(".", 2);
   if (!sig || !payload) return null;
   if (!eq(b64u(sig), createHmac("sha256", secret).update(payload).digest())) return null;
-  try { return JSON.parse(b64u(payload).toString("utf8")) as { user_id?: string }; } catch { return null; }
+  try {
+    const data = JSON.parse(b64u(payload).toString("utf8")) as { user_id?: string; issued_at?: number };
+    if (typeof data.issued_at === "number" && (nowS - data.issued_at > SIGNED_MAX_AGE_S || data.issued_at - nowS > 300)) return null;
+    return data;
+  } catch { return null; }
 }
 
 export interface InboundDeps { db: Db; log: Logger; instagramAppSecret?: string | undefined; instagramVerifyToken?: string | undefined; publicUrl: string; disconnect: (platform: string, externalId: string, purgeData: boolean) => Promise<number> }

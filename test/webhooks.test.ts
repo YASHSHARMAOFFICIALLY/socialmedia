@@ -166,6 +166,9 @@ describe("inbound platform webhooks (Instagram)", async () => {
     expect((await request(t.app).post("/webhooks/instagram/deauthorize").type("form").send({ signed_request: "bad.sig" })).status).toBe(400);
     expect((await request(t.app).post("/webhooks/instagram/data-deletion").type("form").send({ signed_request: signed({ user_id: "ig-user-777" }).replace(/.$/, "A") })).status).toBe(400);
     expect(parseSignedRequest(signed({ user_id: "u" }), SECRET)).toEqual({ user_id: "u" });
+    const now = Math.floor(Date.now() / 1000);
+    expect(parseSignedRequest(signed({ user_id: "u", issued_at: now - 60 }), SECRET)).not.toBeNull();
+    expect(parseSignedRequest(signed({ user_id: "u", issued_at: now - 3 * 86_400 }), SECRET)).toBeNull();   // captured long ago: not replayable
     expect(parseSignedRequest(signed({ user_id: "u" }), "other-secret")).toBeNull();
 
     const de = await request(t.app).post("/webhooks/instagram/deauthorize").type("form").send({ signed_request: signed({ user_id: "ig-user-777" }) });
