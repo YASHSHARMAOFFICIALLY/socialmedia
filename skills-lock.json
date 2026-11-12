@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "skills": {
+    "apple-hig": {
+      "source": "AyushRajSinghParihar/apple-human-interface-skills",
+      "sourceType": "github",
+      "skillPath": "skills/apple-hig/SKILL.md",
+      "computedHash": "454816aaf270f8a35abb71c8b75842e99af160b3c6d1d63966cce2a5cb11d8ae"
+    }
+  }
+}
