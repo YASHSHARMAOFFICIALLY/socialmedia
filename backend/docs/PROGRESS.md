@@ -145,3 +145,5 @@ Built since: Telegram albums (sendMediaGroup, 2-10 items).
 Built since: Pinterest video pins (UNVERIFIED flow, mocked tests).
 Built since: Bluesky video (flow per official tutorial; limits/state names unconfirmed; mocked tests only).
 Built since: Facebook Page/post insights, TikTok video/follower stats, Pinterest pin analytics (migration 0029 adds `outbound_clicks`). All unverified live; Facebook/Pinterest/TikTok connections must re-authorize for the new scopes.
+
+Built since: MCP `prepare_publish` + `publish_post` (scope `content:publish`, signed 10-minute confirmation code bound to the preview, code = Idempotency-Key) and `/mcp/authorize` login redirect to `${APP_URL}/login?next=` (frontend login page not built yet). Tests: `test/mcp-publish.test.ts`.

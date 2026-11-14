@@ -5,17 +5,18 @@ import { registerPrompts } from "./mcp.prompts.js";
 import { registerResources } from "./mcp.resources.js";
 import { analyticsTools } from "./mcp.tools.analytics.js";
 import { contentTools } from "./mcp.tools.content.js";
+import { publishTools } from "./mcp.tools.publish.js";
 import { billingTools } from "./mcp.tools.billing.js";
 import type { Principal, ToolDef } from "./mcp.types.js";
 
 /** Add a tool here (or in a new tools file listed here); nothing else in the server changes. */
-export const TOOLS: ToolDef[] = [...analyticsTools, ...contentTools, ...billingTools];
+export const TOOLS: ToolDef[] = [...analyticsTools, ...contentTools, ...publishTools, ...billingTools];
 
 /** One server per request/caller. Holds no state: safe for concurrent customers on any number of Worker isolates. */
 export function buildMcpServer(deps: McpDeps, principal: Principal): McpServer {
   const server = new McpServer({ name: "distora", version: "1.0.0" });
   for (const def of TOOLS) {
-    server.registerTool(def.name, { title: def.title, description: def.description, inputSchema: def.input, annotations: { readOnlyHint: def.readOnly !== false, destructiveHint: false, openWorldHint: false } }, async (args: Record<string, unknown>) => {
+    server.registerTool(def.name, { title: def.title, description: def.description, inputSchema: def.input, annotations: { readOnlyHint: def.readOnly !== false, destructiveHint: def.destructive === true, openWorldHint: def.openWorld === true } }, async (args: Record<string, unknown>) => {
       let ws: string | null = null;
       try {
         const c = await guard(deps, principal, def.scope, args["workspaceId"] as string | undefined, def.gated !== false);

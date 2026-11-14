@@ -14,7 +14,7 @@ const actor = (req: Request) => ({ id: req.user!.id, email: req.user!.email, req
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const baseUrl = (req: Request, configured?: string) => configured ?? `${req.protocol}://${req.get("host")}`;
 
-export interface McpRouteDeps { auth: McpAuth; deps: McpDeps; log: Logger; publicUrl?: string | undefined; allowedOrigins: string[]; authed: RequestHandler; limit: (o: { name: string; limit: number; windowS: number; key?: (req: Request) => string | undefined }) => RequestHandler }
+export interface McpRouteDeps { auth: McpAuth; deps: McpDeps; log: Logger; publicUrl?: string | undefined; /** Frontend base URL: unsigned browsers on /mcp/authorize are sent to its /login. */ appUrl?: string | undefined; allowedOrigins: string[]; authed: RequestHandler; limit: (o: { name: string; limit: number; windowS: number; key?: (req: Request) => string | undefined }) => RequestHandler }
 
 export function mcpRoutes(d: McpRouteDeps) {
   const r = Router();
@@ -108,7 +108,12 @@ export function mcpRoutes(d: McpRouteDeps) {
   const pageHead = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`;
   const pageStyle = `style="font:16px system-ui;max-width:28rem;margin:3rem auto;padding:0 1rem"`;
   const authQuery = (b: Record<string, unknown>) => ({ client_id: String(b["client_id"] ?? ""), redirect_uri: String(b["redirect_uri"] ?? ""), response_type: String(b["response_type"] ?? "code"), code_challenge: String(b["code_challenge"] ?? ""), code_challenge_method: String(b["code_challenge_method"] ?? ""), scope: String(b["scope"] ?? "") });
-  r.get("/mcp/authorize", d.authed, async (req, res) => {
+  // Not signed in: send the browser to the app's login, which returns here via ?next=. Without an app URL, keep the 401.
+  const signInFirst: RequestHandler = (req, res, next) => d.authed(req, res, (err?: unknown) => {
+    if (err && !req.user && d.appUrl) { res.redirect(302, `${d.appUrl.replace(/\/$/, "")}/login?next=${encodeURIComponent(baseUrl(req, d.publicUrl) + req.originalUrl)}`); return; }
+    next(err);
+  });
+  r.get("/mcp/authorize", signInFirst, async (req, res) => {
     res.type("html").setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'");
     res.setHeader("Cache-Control", "no-store");
     try {

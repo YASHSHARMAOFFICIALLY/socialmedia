@@ -5,7 +5,8 @@ import type { AnalyticsService } from "../analytics/analytics.service.js";
 import type { BillingPayments } from "../billing/billing.payments.js";
 import type { BillingService } from "../billing/billing.service.js";
 import type { ContentService } from "../content/content.service.js";
+import type { PublishingService } from "../publishing/publishing.service.js";
 import type { WorkspaceService } from "../workspaces/workspace.service.js";
 
 /** The application services MCP delegates to. No business logic lives in the MCP layer: same services, same rules as REST. */
-export interface McpDeps { db: Db; log: Logger; workspaces: WorkspaceService; accounts: AccountService; content: ContentService; analytics: AnalyticsService; billing: BillingService; billingPayments: BillingPayments }
+export interface McpDeps { db: Db; log: Logger; workspaces: WorkspaceService; accounts: AccountService; content: ContentService; analytics: AnalyticsService; billing: BillingService; billingPayments: BillingPayments; publishing: PublishingService; /** HMAC key for publish confirmation codes. */ confirmSecret: string }

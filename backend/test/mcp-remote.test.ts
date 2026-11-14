@@ -162,7 +162,7 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
       const page = await owner.agent.get(`/mcp/authorize?${q(client_id)}`);
       expect(page.status).toBe(200);
       expect(page.text).toContain("Claude");
-      expect((await request(t.app).get(`/mcp/authorize?${q(client_id)}`)).status).toBe(401);                 // needs a signed-in browser
+      expect((await request(t.app).get(`/mcp/authorize?${q(client_id)}`)).status).toBe(302);                 // not signed in: sent to the app login
       const done = await approve(owner, client_id, ws);
       expect(done.status).toBe(200);
       const back = codeFrom(done.text);
