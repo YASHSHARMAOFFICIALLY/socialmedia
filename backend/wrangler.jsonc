@@ -7,7 +7,7 @@
   "vars": { "NODE_ENV": "production", "LOG_LEVEL": "info", "CORS_ORIGINS": "" },
   // Create with: wrangler hyperdrive create social-db --connection-string="<neon DIRECT connection string>"
   // Local dev uses CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=<postgres url>
-  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "REPLACE_WITH_HYPERDRIVE_ID" }],
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "5c716710e8024a0484c8aa932c5a0882" }],
   // Delivery only: Postgres (jobs + outbox) is the source of truth, the sweeper re-enqueues anything lost.
   "queues": {
     "producers": [
