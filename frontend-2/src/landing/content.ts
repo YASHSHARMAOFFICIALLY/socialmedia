@@ -109,7 +109,8 @@ export const assistants = {
   // Five small working widgets (pattern from a reference bento: label + status pill on top, a live
   // widget in the middle, actions at the bottom). Every behaviour shown is a real Distora behaviour.
   chat: {
-    label: "Ask from your assistant",
+    lead: "Ask in plain words.",
+    rest: "Claude, ChatGPT or Cursor drafts and schedules. Nothing goes out until you confirm.",
     apps: [
       { name: "Claude", how: "Add Distora as a connector, sign in in the browser." },
       { name: "ChatGPT", how: "Add Distora as a connector, sign in in the browser." },
@@ -126,7 +127,8 @@ export const assistants = {
     again: "Same code again: nothing new posted. Asking twice never posts twice.",
   },
   approvals: {
-    label: "Team approval",
+    lead: "Nothing slips through.",
+    rest: "A reviewer approves, and editing an approved post sends it back.",
     steps: ["Written", "Reviewed", "Scheduled"],
     approve: "Approve",
     edit: "Edit after approval",
@@ -137,7 +139,8 @@ export const assistants = {
     ],
   },
   heatmap: {
-    label: "Best time to post",
+    lead: "Know when to post.",
+    rest: "The best day and hour for each network, once it has five posts.",
     pill: "Example account",
     days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     slots: ["08", "10", "13", "16", "18", "21"],
@@ -150,7 +153,8 @@ export const assistants = {
     note: "Shown once a network has at least five posts.",
   },
   limits: {
-    label: "Checked per network",
+    lead: "Checked per network.",
+    rest: "Type, and see which limits you would break.",
     pill: "Type to test",
     text: "Friday at 10:00 we ship the thing we've been building all year. Here's what's new.",
     // From backend/src/integrations/*/rules.ts (Mastodon: software default, instances can differ).
@@ -162,7 +166,8 @@ export const assistants = {
     ],
   },
   zones: {
-    label: "Your 10:00, their clock",
+    lead: "One 10:00, every timezone.",
+    rest: "Daylight saving included.",
     pill: "DST handled",
     // UTC offsets on 20 Nov 2026 (all outside daylight saving then).
     // ponytail: fixed offsets for one example date; the product uses the tz database.
