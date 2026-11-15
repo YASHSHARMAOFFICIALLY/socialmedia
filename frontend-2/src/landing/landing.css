@@ -1,0 +1,243 @@
+/* Variant 2 motion (design.md). The hero tells its story once: the photo settles, headline words
+   rise one by one, the product screen follows, and the eleven network icons land in a row
+   under the button (components/network-row.tsx). The nav shrinks into a pill as you scroll.
+   The rest of the page only has hover colours and Lenis smooth scrolling.
+   With reduced motion: nothing rises or settles, and the icons are simply in place. */
+
+/* One focus style: ink outline on the page, white on the hero sky and the transparent nav. */
+.landing :focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 3px;
+}
+.landing #top h1 ~ * :focus-visible {
+  outline-color: #ffffff;
+}
+
+/* Hero: the photo shows everywhere except a soft oval behind the text, where clear sky in the
+   photo's own blue (sampled from its sky) fades in over it. Measured for AA, see design.md. */
+/* Soft focus behind the text, same oval and horizon cut-off as the tint below. */
+.hero-focus {
+  backdrop-filter: blur(18px) saturate(1.15);
+  mask-image:
+    radial-gradient(ellipse 620px 42% at 50% 27%, #000 50%, transparent 100%),
+    linear-gradient(#000 42%, transparent 50%);
+  mask-composite: intersect;
+}
+@media (min-width: 1024px) {
+  .hero-focus {
+    mask-image:
+      radial-gradient(ellipse 66% 42% at 50% 27%, #000 50%, transparent 100%),
+      linear-gradient(#000 42%, transparent 50%);
+  }
+}
+.hero-clearing {
+  opacity: var(--hero-tint, 0.75);
+  background: linear-gradient(#0566ad 0%, #096eb5 35%, #0a6fb6 55%, #0a6fb6 65%);
+  /* Oval behind the text, intersected with a cut-off just above the horizon so grass stays green. */
+  mask-image:
+    radial-gradient(ellipse 620px 42% at 50% 27%, #000 58%, transparent 100%),
+    linear-gradient(#000 42%, transparent 50%);
+  mask-composite: intersect;
+}
+/* The oval follows the text block: wider on large screens, stronger on phones where the body copy
+   is 20px (normal text, needs 4.5:1) instead of 24px (large text, 3:1). */
+@media (min-width: 1024px) {
+  .hero-clearing {
+    mask-image:
+      radial-gradient(ellipse 66% 42% at 50% 27%, #000 58%, transparent 100%),
+      linear-gradient(#000 42%, transparent 50%);
+  }
+}
+@media (max-width: 639px) {
+  .hero-clearing {
+    opacity: 1;
+  }
+}
+/* Light fade at the very top so the transparent nav reads over white clouds. */
+.hero-top-fade {
+  background: linear-gradient(rgb(5 102 173 / 0.75) 30%, rgb(5 102 173 / 0));
+}
+
+/* Pages without the hero photo: the compact pill from the start, no scroll morph. */
+.site-nav.is-solid {
+  animation: none;
+  max-width: 780px;
+  color: var(--color-ink);
+  background-color: rgb(255 255 255 / 0.92);
+  box-shadow: 0 0 0 1px var(--color-line), 0 10px 30px rgb(10 40 90 / 0.08);
+  backdrop-filter: blur(14px);
+}
+.site-nav.is-solid .site-nav-cta {
+  animation: none;
+  background-color: var(--color-ink);
+  color: #ffffff;
+}
+
+/* Nav: transparent full-width bar over the hero, compact white pill after 160px of scroll. */
+.site-nav {
+  color: #ffffff;
+}
+.site-nav-cta {
+  background-color: #ffffff;
+  color: var(--color-ink);
+}
+@keyframes nav-compact {
+  to {
+    max-width: 780px;
+    color: var(--color-ink);
+    background-color: rgb(255 255 255 / 0.88);
+    box-shadow:
+      0 0 0 1px var(--color-line),
+      0 10px 30px rgb(10 40 90 / 0.12);
+    backdrop-filter: blur(14px);
+  }
+}
+@keyframes nav-cta-compact {
+  to {
+    background-color: var(--color-ink);
+    color: #ffffff;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .site-nav {
+    animation: nav-compact linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 160px;
+  }
+  .site-nav-cta {
+    animation: nav-cta-compact linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 160px;
+  }
+}
+@supports not (animation-timeline: scroll()) {
+  .site-nav {
+    max-width: 780px;
+    color: var(--color-ink);
+    background-color: rgb(255 255 255 / 0.92);
+    box-shadow: 0 0 0 1px var(--color-line);
+  }
+  .site-nav-cta {
+    background-color: var(--color-ink);
+    color: #ffffff;
+  }
+}
+
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+}
+@keyframes word-in {
+  from {
+    opacity: 0;
+    translate: 0 0.35em;
+    filter: blur(6px);
+  }
+}
+@keyframes photo-settle {
+  from {
+    scale: 1.06;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-in {
+    animation: hero-in 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .word-in {
+    animation: word-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .hero-photo {
+    animation: photo-settle 2400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Icons land one after another. Fill mode backwards only, so the hover lift (translate) works
+     once the landing is over. */
+  .network-tile {
+    animation: tile-land 700ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  :root {
+    interpolate-size: allow-keywords;
+  }
+  .faq-item::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 250ms cubic-bezier(0.22, 1, 0.36, 1),
+      content-visibility 250ms allow-discrete;
+  }
+  .faq-item[open]::details-content {
+    block-size: auto;
+  }
+}
+
+@keyframes tile-land {
+  from {
+    opacity: 0;
+    translate: var(--tile-from, 0 18px);
+    scale: 0.6;
+  }
+}
+
+/* Sky life (birds) is decoration only: gone for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .sky-life {
+    display: none;
+  }
+}
+
+/* Bento (sections/assistants.tsx). Countdown: two integer custom properties drive CSS counters,
+   so the code ticks 9:59 to 0:00 with no JS. It restarts whenever the prompt is picked again
+   (the element remounts). Static "10:00" with reduced motion. */
+@property --bento-m {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 10;
+}
+@property --bento-s {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
+.bento-countdown::after {
+  counter-reset: m var(--bento-m) s var(--bento-s);
+  content: counter(m) ":" counter(s, decimal-leading-zero);
+}
+@keyframes bento-minutes {
+  from { --bento-m: 10; }
+  to { --bento-m: 0; }
+}
+@keyframes bento-seconds {
+  from { --bento-s: 60; }
+  to { --bento-s: 0; }
+}
+@keyframes bento-rise {
+  from { opacity: 0; translate: 0 24px; filter: blur(4px); }
+}
+@keyframes bento-pop {
+  from { opacity: 0; translate: 0 6px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* steps(.., start): the first second already shows 9:59, the last shows 0:00. */
+  .bento-countdown::after {
+    animation:
+      bento-minutes 600s steps(10, start) forwards,
+      bento-seconds 60s steps(60, start) 10;
+  }
+  /* New content after a click: short and quick, so it answers the click without slowing it. */
+  .bento-pop {
+    animation: bento-pop 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @supports (animation-timeline: view()) {
+    /* Cards rise as they enter the viewport. Scroll-linked, so scrolling back up reverses it. */
+    .bento-tile {
+      animation: bento-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+}

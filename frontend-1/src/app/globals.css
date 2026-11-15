@@ -15,8 +15,8 @@
    Fonts are set in src/app/layout.tsx.
    ================================================================== */
 :root {
-  --paper: oklch(0.985 0.003 90);
-  --ink: oklch(0.21 0.006 90);
+  --paper: #fff3e7; /* frontend-1/design.md Canvas */
+  --ink: #030302; /* frontend-1/design.md Ink */
   --brand: oklch(0.52 0.13 40); /* placeholder until the brand is picked */
   --danger: oklch(0.55 0.2 27);
   --radius: 0.5rem;
@@ -66,10 +66,37 @@
   --sidebar-ring: var(--brand);
 }
 
+/* Landing palette and elevation from frontend-1/design.md (Craft scrapbook style).
+   Pastels are for paper scraps behind visuals only, never for text. */
+@theme {
+  --color-canvas: #fff3e7;
+  --color-ink: #030302;
+  --color-graphite: #41413f;
+  --color-ash: #e1e1e1;
+  --color-linen: #f7f7f7;
+  --color-mint: #9bd8a9;
+  --color-marigold: #fde99b;
+  --color-periwinkle: #b8caf5;
+  --color-sky: #9ed4ef;
+  --color-mist: #d1eef9;
+  --color-moss: #7cc48f; /* darker mint, only for shading inside illustrations */
+  --color-papaya: #ff4500;
+  /* Serif headline sizes, fluid between phone and desktop. */
+  --text-display: clamp(2.5rem, 1.6rem + 4vw, 4.125rem);
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.04em;
+  --text-heading: clamp(2rem, 1.5rem + 2.2vw, 2.875rem);
+  --text-heading--line-height: 1.1;
+  --text-heading--letter-spacing: -0.03em;
+  --shadow-float: 0 50px 40px rgb(0 0 0 / 0.01), 0 50px 40px rgb(0 0 0 / 0.02), 0 20px 40px rgb(0 0 0 / 0.05), 0 3px 10px rgb(0 0 0 / 0.08);
+  --shadow-lift: 0 12px 12px 2px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+}
+
 @theme inline {
   --font-sans: var(--font-body);
-  --font-heading: var(--font-body);
+  --font-heading: var(--font-display);
   --font-mono: var(--font-code);
+  --font-hand: var(--font-handwriting);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

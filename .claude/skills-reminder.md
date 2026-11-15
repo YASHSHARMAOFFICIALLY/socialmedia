@@ -1,6 +1,6 @@
 PROJECT SKILL RULE (socialmedia). Decide from this prompt, without being asked:
 
-FRONTEND / UI / DESIGN work (anything in frontend/, components, pages, styling, layout, copy on screen, animation, design review):
+FRONTEND / UI / DESIGN work (anything in frontend-*/, components, pages, styling, layout, copy on screen, animation, design review):
 invoke ALL of these via the Skill tool before writing or reviewing code, not just 2-3:
   antislop, antislop-ui, antislop-human, antislop-layoutmobile, antislop-copywriting,
   frontend-design:frontend-design, frontend-design-guidelines, design-taste, tastemaker,
