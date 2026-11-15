@@ -93,3 +93,44 @@ describe("account erasure (DELETE /me)", async () => {
     expect((await t.db.query("SELECT 1 FROM audit_logs WHERE action = 'account.deleted' AND entity_id = $1", [u.id])).rowCount).toBe(1);
   });
 });
+
+describe("username sign-in", async () => {
+  const t = await createTestApp();
+  afterAll(t.close);
+  const signUp = (username: string, email: string) =>
+    request(t.app).post("/api/auth/sign-up/email").set("Origin", ORIGIN).send({ name: username, email, username, password: "correct-horse-battery" });
+
+  it("signs up with a username and signs in with it; a wrong password fails", async () => {
+    expect((await signUp("maya_writes", "maya@example.com")).status).toBe(200);
+    const agent = request.agent(t.app);
+    const ok = await agent.post("/api/auth/sign-in/username").set("Origin", ORIGIN).send({ username: "maya_writes", password: "correct-horse-battery" });
+    expect(ok.status).toBe(200);
+    expect((await agent.get("/workspaces")).status).toBe(200);
+    const bad = await request(t.app).post("/api/auth/sign-in/username").set("Origin", ORIGIN).send({ username: "maya_writes", password: "wrong-password-123" });
+    expect(bad.status).toBe(401);
+  });
+  it("usernames are unique, case-insensitively", async () => {
+    expect((await signUp("Sam_Posts", "sam1@example.com")).status).toBe(200);
+    expect((await signUp("sam_posts", "sam2@example.com")).status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe("Google sign-in", async () => {
+  const on = await createTestApp([], { env: { GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com", GOOGLE_CLIENT_SECRET: "test-secret" } });
+  afterAll(on.close);
+  const off = await createTestApp();
+  afterAll(off.close);
+  const start = (app: typeof on.app) => request(app).post("/api/auth/sign-in/social").set("Origin", ORIGIN).send({ provider: "google", callbackURL: `${ORIGIN}/app` });
+
+  it("returns a Google consent URL when Google is configured", async () => {
+    const r = await start(on.app);
+    expect(r.status).toBe(200);
+    const url = new URL(r.body.url);
+    expect(url.hostname).toBe("accounts.google.com");
+    expect(url.searchParams.get("client_id")).toBe("test-client.apps.googleusercontent.com");
+    expect(url.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/auth/callback/google`);
+  });
+  it("is refused when Google is not configured", async () => {
+    expect((await start(off.app)).status).toBeGreaterThanOrEqual(400);
+  });
+});

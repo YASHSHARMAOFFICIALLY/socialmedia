@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { username } from "better-auth/plugins";
 import { PostgresDialect } from "kysely";
 import type { Config } from "../../config/env.js";
 import type { Db } from "../../infrastructure/database/db.js";
@@ -43,6 +44,12 @@ export function createAuth(db: Db, cfg: Config, mailer: Mailer) {
       sendOnSignUp: true, autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => { await mailer.send({ to: user.email, subject: "Verify your email", html: `<p><a href="${url}">Verify your email address</a></p>` }); },
     },
+    // Google sign-in reuses the Google OAuth client (also used for YouTube); it is only on when both are set.
+    // The client must allow ${BETTER_AUTH_URL}/api/auth/callback/google as a redirect URI.
+    ...(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET
+      ? { socialProviders: { google: { clientId: cfg.GOOGLE_CLIENT_ID, clientSecret: cfg.GOOGLE_CLIENT_SECRET, prompt: "select_account" as const } } }
+      : {}),
+    plugins: [username()],
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     // Behind Cloudflare the real client address is cf-connecting-ip. Counters live in Postgres so they hold across isolates.
     advanced: { ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] }, useSecureCookies: cfg.NODE_ENV === "production" },
@@ -50,6 +57,7 @@ export function createAuth(db: Db, cfg: Config, mailer: Mailer) {
       enabled: cfg.NODE_ENV !== "test", storage: "database", window: 60, max: 100,
       customRules: {
         "/sign-in/email": { window: 60, max: 5 },
+        "/sign-in/username": { window: 60, max: 5 },
         "/sign-up/email": { window: 3600, max: 10 },
         "/request-password-reset": { window: 3600, max: 5 },
         "/reset-password": { window: 3600, max: 10 },
