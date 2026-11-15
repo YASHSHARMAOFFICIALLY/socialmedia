@@ -1,27 +1,15 @@
 import Link from "next/link";
 import { askAi, footer, nav, productName } from "../content";
-import { channels, integrations } from "../seo-pages";
+import { channels, comparisons, integrations } from "../seo-pages";
 import { gutter } from "../components/layout";
 import { LogoMark } from "./site-header";
-import { networkLogos } from "../components/network-logos";
-import { assistantLogos } from "../components/assistant-logos";
+import { BrandGlyph as Glyph } from "../components/brand-glyph";
 
 // Link-heavy SEO footer (Postiz/Ribbon, light, brand glyph beside each link; docs/landing-reference.md §3):
 // brand block and "Ask AI about Distora" left, then columns. Every link opens a real page or section: the AI and network columns go to one
 // static page each (seo-pages.ts), which is what makes the footer an internal-link hub.
-// Compare and guide columns get added when those pages exist; no dead links before that.
+// A Guides column gets added when those pages exist; no dead links before that.
 const linkClass = "inline-flex min-h-9 items-center gap-2.5 text-sm text-muted transition-colors hover:text-ink";
-
-// Brand glyph in its own colour (Instagram uses its pink; the gradient lives in the hero only).
-function Glyph({ name }: { name: string }) {
-  const logo = networkLogos[name] ?? assistantLogos[name as keyof typeof assistantLogos];
-  if (!logo) return null;
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" className="size-4 shrink-0">
-      <path d={logo.path} fill={name === "Instagram" ? "#d6249f" : logo.color} />
-    </svg>
-  );
-}
 
 function Column({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -36,7 +24,7 @@ export function SiteFooter() {
   const year = 2026; // ponytail: fixed; static pages would freeze `new Date()` at build time anyway
   return (
     <footer className="border-t border-line bg-white">
-      <div className={`${gutter} grid gap-12 py-16 sm:py-20 lg:grid-cols-[1.4fr_1fr_1fr_1.6fr_1fr]`}>
+      <div className={`${gutter} grid gap-12 py-16 sm:py-20 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.6fr_1fr_1fr]`}>
         <div className="max-w-sm">
           <Link href="/" className="inline-flex min-h-11 items-center gap-2.5 font-heading text-2xl text-ink">
             <LogoMark />
@@ -114,6 +102,16 @@ export function SiteFooter() {
               </li>
             ))}
           </div>
+        </Column>
+
+        <Column title="Compare">
+          {comparisons.map((p) => (
+            <li key={p.slug}>
+              <Link href={`/vs/${p.slug}`} className={linkClass}>
+                vs {p.name}
+              </Link>
+            </li>
+          ))}
         </Column>
 
         <Column title="For AI and search">

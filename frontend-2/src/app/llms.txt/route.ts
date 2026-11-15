@@ -1,4 +1,4 @@
-import { channels, integrations } from "@/landing/seo-pages";
+import { channels, comparisons, integrations } from "@/landing/seo-pages";
 import { faq, footer, productName } from "@/landing/content";
 import { siteUrl } from "@/lib/site";
 
@@ -17,6 +17,9 @@ export function GET() {
     "",
     "## Networks",
     ...channels.map((p) => link(`/channels/${p.slug}`, p.title, p.description)),
+    "",
+    "## Compare",
+    ...comparisons.map((p) => link(`/vs/${p.slug}`, p.title, p.description)),
     "",
     "## FAQ",
     ...faq.items.flatMap((i) => [`### ${i.q}`, i.a, ""]),

@@ -158,3 +158,98 @@ export const channels: SeoPage[] = [
     points: ["Posts and media albums.", "Scheduled in your timezone like every other network."],
   },
 ];
+
+// /vs/<slug> comparison pages. Rules: only facts we checked (sources listed on each page, checked on
+// the date below); pricing *models* only, never prices, because third-party price lists disagree and
+// change; say where the other tool is stronger. Distora facts come from backend/docs/PROGRESS.md.
+export const comparedOn = "15 November 2026";
+
+export type ComparePage = {
+  slug: string;
+  name: string;
+  title: string;
+  description: string;
+  rows: { label: string; distora: string; them: string }[];
+  theyAreStronger: string[];
+  distoraIsDifferent: string[];
+  sources: { label: string; url: string }[];
+};
+
+const distoraNetworks = "Instagram, X, LinkedIn (personal), YouTube, Threads, Facebook Pages, Pinterest, TikTok, Bluesky, Mastodon, Telegram";
+const distoraAi = "Yes: remote MCP server for Claude, ChatGPT and Cursor, plus a CLI and REST API. Publishing needs a confirmation code.";
+const distoraPrice = "Per workspace. Prices not published yet.";
+
+export const comparisons: ComparePage[] = [
+  {
+    slug: "buffer",
+    name: "Buffer",
+    title: "Distora vs Buffer",
+    description: "How Distora and Buffer differ on pricing model, networks, AI assistant support and analytics, with the sources we checked.",
+    rows: [
+      { label: "Pricing model", distora: distoraPrice, them: "Per connected channel, with a free plan for a few channels." },
+      { label: "Networks", distora: distoraNetworks, them: "Facebook, Instagram, TikTok, YouTube, LinkedIn, Google Business Profile, X, Pinterest, Threads, Bluesky, Mastodon" },
+      { label: "Use from Claude, ChatGPT or Cursor", distora: distoraAi, them: "Not covered by the sources we checked. See Buffer's site." },
+    ],
+    theyAreStronger: ["Years in the market and a free plan you can start on today.", "Google Business Profile posting, which Distora doesn't do.", "Published prices you can plan around."],
+    distoraIsDifferent: ["Telegram channels, which Buffer's network list doesn't include.", "AI assistants can draft and schedule, but never publish without your confirmation code.", "Analytics only adds up numbers that mean the same on every network; views stay per network."],
+    sources: [
+      { label: "Buffer pricing (official, check current prices)", url: "https://buffer.com/pricing" },
+      { label: "SocialPilot: Buffer pricing in 2026", url: "https://www.socialpilot.co/insights/buffer-pricing" },
+      { label: "NapoleonCat: Buffer per-channel billing", url: "https://napoleoncat.com/blog/buffer-pricing/" },
+    ],
+  },
+  {
+    slug: "hootsuite",
+    name: "Hootsuite",
+    title: "Distora vs Hootsuite",
+    description: "How Distora and Hootsuite differ on pricing model, networks, AI assistant support and team features, with the sources we checked.",
+    rows: [
+      { label: "Pricing model", distora: distoraPrice, them: "Per user, paid plans only (trial available)." },
+      { label: "Networks", distora: distoraNetworks, them: "Instagram, Facebook, X, LinkedIn, TikTok, YouTube, Pinterest, Threads, Bluesky, WhatsApp" },
+      { label: "Use from Claude, ChatGPT or Cursor", distora: distoraAi, them: "Not covered by the sources we checked. See Hootsuite's site." },
+    ],
+    theyAreStronger: ["Social listening across many sites, which Distora doesn't have.", "WhatsApp, which Distora doesn't post to.", "Enterprise sales, support and compliance programs."],
+    distoraIsDifferent: ["Priced per workspace, not per user, so adding a teammate doesn't change the plan.", "Mastodon and Telegram, which aren't in Hootsuite's listed publishing networks.", "Approval flow where editing an approved post sends it back for review."],
+    sources: [
+      { label: "Hootsuite pricing (official, check current prices)", url: "https://www.hootsuite.com/plans" },
+      { label: "SocialPilot: Hootsuite pricing in 2026", url: "https://www.socialpilot.co/?p=715189" },
+      { label: "Makerstack: Hootsuite review 2026", url: "https://makerstack.co/reviews/hootsuite-review/" },
+    ],
+  },
+  {
+    slug: "later",
+    name: "Later",
+    title: "Distora vs Later",
+    description: "How Distora and Later differ on pricing model, networks and auto-publishing, with the sources we checked.",
+    rows: [
+      { label: "Pricing model", distora: distoraPrice, them: "Per social set, with users and AI credits as add-ons." },
+      { label: "Auto-publishing", distora: "All 11 networks publish automatically.", them: "Instagram, Facebook, TikTok, Pinterest and LinkedIn auto-publish; other networks send a reminder to post by hand." },
+      { label: "Use from Claude, ChatGPT or Cursor", distora: distoraAi, them: "Not covered by the sources we checked. See Later's site." },
+    ],
+    theyAreStronger: ["Visual Instagram planning and a long track record with creators.", "Snapchat, which Distora doesn't support."],
+    distoraIsDifferent: ["Every supported network publishes on its own; no phone reminders.", "Threads, Bluesky, Mastodon and Telegram alongside the big networks.", "A REST API and signed webhooks for your own tools."],
+    sources: [
+      { label: "Later pricing (official, check current prices)", url: "https://later.com/pricing/" },
+      { label: "Fastlancer: Later review 2026", url: "https://www.fastlancer.org/en/fastlancer-blog/later-review/" },
+      { label: "Postfast: Later vs Buffer 2026", url: "https://postfa.st/blog/later-vs-buffer-feature-and-pricing-comparison" },
+    ],
+  },
+  {
+    slug: "postiz",
+    name: "Postiz",
+    title: "Distora vs Postiz",
+    description: "How Distora and Postiz differ on licence, hosting, networks and how AI assistants publish, with the sources we checked.",
+    rows: [
+      { label: "Licence and hosting", distora: "Hosted service.", them: "Open source (AGPL-3.0); self-host it or use their cloud." },
+      { label: "Networks", distora: distoraNetworks, them: "30+ including Reddit, Discord and Slack" },
+      { label: "Use from Claude, ChatGPT or Cursor", distora: distoraAi, them: "Yes: MCP support since v1.39.2 (April 2025)." },
+    ],
+    theyAreStronger: ["Open source: you can read the code and run it on your own server.", "Far more networks, including Reddit, Discord and Slack.", "A large community (40,000+ GitHub stars)."],
+    distoraIsDifferent: ["Publishing from an AI assistant needs a confirmation code from the preview; asking twice never posts twice.", "Analytics that won't add views across networks, because each network counts them differently.", "Nothing to host or update yourself."],
+    sources: [
+      { label: "Postiz on GitHub (licence, stars)", url: "https://github.com/gitroomhq/postiz-app" },
+      { label: "Postiz: OpenClaw page (platform list)", url: "https://postiz.com/openclaw" },
+      { label: "Postiz v1.39.3 release notes (MCP)", url: "https://postiz.com/news/postiz-v1-39-3-mcps-auto-posters-plugs" },
+    ],
+  },
+];

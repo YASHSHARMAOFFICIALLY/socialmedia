@@ -6,6 +6,11 @@ import { assistants } from "../content";
 import { Heading, Section, headingGap } from "../components/layout";
 import { assistantLogos } from "../components/assistant-logos";
 import { networkLogos } from "../components/network-logos";
+import dynamic from "next/dynamic";
+
+// Pixel-art stickers are heavy (every pixel is a shape). They sit below the fold, so they load
+// after the page instead of in its first bundle.
+const HeadingStickers = dynamic(() => import("../components/heading-stickers"), { ssr: false });
 
 // Bento of five small working widgets, each card in its own soft colour on the pure white page. Each card: label + coloured status pill on top,
 // a live widget in the middle, actions at the bottom. Colour carries meaning, never decoration:
@@ -21,7 +26,8 @@ export function Assistants() {
   const a = assistants;
   return (
     <Section id={a.id} className="border-t border-line">
-      <div className="mx-auto max-w-2xl text-center">
+      <div className="relative mx-auto max-w-2xl text-center">
+        <HeadingStickers />
         <Heading id={`${a.id}-title`} title={a.title} accent={a.titleAccent} />
         <p className="mt-6 text-lg text-muted">{a.body}</p>
       </div>

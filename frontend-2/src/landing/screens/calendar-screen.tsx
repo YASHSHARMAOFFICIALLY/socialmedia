@@ -1,8 +1,14 @@
 import { cn } from "@/lib/utils";
 import { product } from "../content";
 import { Window } from "../components/window";
+import { BrandGlyph } from "../components/brand-glyph";
 
-const stateText = { scheduled: "", repeats: "Repeats weekly", review: "Needs review" } as const;
+// State chips: amber = waiting on a person, sky = repeats. Scheduled posts need no chip.
+const states = {
+  scheduled: null,
+  repeats: { text: "Repeats weekly", cls: "bg-sky-50 text-sky-800" },
+  review: { text: "Needs review", cls: "bg-amber-50 text-amber-800" },
+} as const;
 
 // A week of scheduled posts. On phones the grid scrolls sideways inside the window, never the page.
 export function CalendarScreen() {
@@ -43,13 +49,10 @@ function Row({ hour, hourIndex }: { hour: string; hourIndex: number }) {
         return (
           <div key={d} className="min-h-24 space-y-1 border-t border-l border-line p-1.5">
             {here.map((p) => (
-              <div
-                key={p.label}
-                className={cn("rounded-md border px-2 py-1.5", p.state === "review" ? "border-signal/40 bg-signal-soft" : "border-line bg-paper")}
-              >
-                <p className="font-medium text-ink">{p.network}</p>
-                <p className="truncate text-muted">{p.label}</p>
-                {stateText[p.state] && <p className="mt-0.5 font-medium text-ink">{stateText[p.state]}</p>}
+              <div key={p.label} className="rounded-md border border-line bg-white px-1.5 py-1.5 shadow-[0_1px_2px_rgb(17_17_19/0.04)]">
+                <BrandGlyph name={p.network} className="size-3.5" />
+                <p className="mt-1 line-clamp-2 leading-tight font-medium text-ink">{p.label}</p>
+                {states[p.state] && <p className={cn("mt-1 w-fit rounded px-1 py-0.5 text-[11px] font-medium", states[p.state]!.cls)}>{states[p.state]!.text}</p>}
               </div>
             ))}
           </div>

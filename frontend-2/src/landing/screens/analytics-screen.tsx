@@ -1,5 +1,6 @@
 import { product } from "../content";
 import { Window } from "../components/window";
+import { BrandGlyph, brandColor } from "../components/brand-glyph";
 
 // Per-network metrics as bars without figures: the point is which columns get a total.
 // Likes and comments are summed across networks; views are not, and the total row says so.
@@ -24,24 +25,29 @@ export function AnalyticsScreen() {
         <tbody>
           {a.rows.map((row) => (
             <tr key={row.network} className="border-t border-line">
-              <td className="px-4 py-4 font-medium text-ink sm:px-6">{row.network}</td>
+              <td className="px-4 py-4 font-medium text-ink sm:px-6">
+                <span className="flex items-center gap-2">
+                  <BrandGlyph name={row.network} />
+                  {row.network}
+                </span>
+              </td>
               {a.columns.map((col) => (
                 <td key={col.key} className="px-3 py-4">
-                  <span className="block h-2 rounded-full bg-line">
-                    <span className="block h-2 rounded-full bg-ink" style={{ width: `${row[col.key] * 100}%` }} />
+                  <span className="block h-2 rounded-full bg-ink/[0.06]">
+                    <span className="block h-2 rounded-full" style={{ width: `${row[col.key] * 100}%`, backgroundColor: brandColor(row.network) }} />
                   </span>
                 </td>
               ))}
             </tr>
           ))}
-          <tr className="border-t border-line bg-paper">
+          <tr className="border-t border-line">
             <td className="px-4 py-4 font-medium text-ink sm:px-6">{a.totalLabel}</td>
             {a.columns.map((col) => (
               <td key={col.key} className="px-3 py-4">
                 {col.summed ? (
                   <span className="block h-2 rounded-full bg-ink" />
                 ) : (
-                  <span className="rounded-md bg-signal-soft px-2 py-1 font-medium text-ink">{a.notSummed}</span>
+                  <span className="rounded-md bg-amber-50 px-2 py-1 font-medium text-amber-800">{a.notSummed}</span>
                 )}
               </td>
             ))}

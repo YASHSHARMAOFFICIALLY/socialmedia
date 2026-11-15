@@ -169,7 +169,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
       <p className="mt-8 text-sm text-muted">
         {signup ? "Already have an account? " : "New to Distora? "}
-        <Link href={signup ? "/login" : "/signup"} className="font-semibold text-ink underline decoration-line underline-offset-4 hover:decoration-ink">
+        <Link href={signup ? "/login" : "/signup"} className="inline-flex min-h-11 items-center font-semibold text-ink underline decoration-line underline-offset-4 hover:decoration-ink">
           {signup ? "Log in" : "Create an account"}
         </Link>
       </p>

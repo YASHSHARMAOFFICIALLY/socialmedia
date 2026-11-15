@@ -73,3 +73,24 @@ Distora (sections), Use it from (/integrations/*), Networks (/channels/*), For A
 from src/landing/seo-pages.ts with their own title, description and canonical URL, plus
 sitemap.xml, robots.txt and llms.txt. Compare and guide pages come later and are not linked yet.
 Set NEXT_PUBLIC_SITE_URL at deploy (falls back to localhost).
+
+## Compare pages (/vs/buffer, /vs/hootsuite, /vs/later, /vs/postiz)
+Data in src/landing/seo-pages.ts (`comparisons`). Rules: pricing models only, never prices
+(third-party price lists disagree); every page says where the other tool is stronger; sources
+listed with the date checked (15 Nov 2026), each link verified to load. Linked from the footer's
+Compare column, the sitemap and llms.txt.
+
+## Product screens and "What is Distora?"
+Brand glyphs (components/brand-glyph.tsx, shared with the footer) on calendar chips and analytics
+rows; analytics bars in each network's colour; amber = waiting on a person, sky = repeats.
+"What is Distora?" shows the eleven networks as logo chips instead of a repeated sentence.
+
+## Stickers (stick-it-up, MIT)
+Two pixel stickers beside the "Try it" heading (desktop only, decorative, peel on hover).
+Imported by name from one local file (components/heading-stickers.tsx) and lazy-loaded: 29 KB,
+after the page. Importing the package by name inside dynamic() pulls in all 10 MB, so don't.
+Don't use the stickers of real people or other studios' characters.
+
+## Phone check (375px)
+Home, login, signup, integration, network and compare pages: no sideways scroll; tap targets
+at least 40px.
