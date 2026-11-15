@@ -57,6 +57,8 @@ function Card({ lead, rest, className, children }: { lead: string; rest: string;
 const button = "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40";
 const primary = `${button} bg-ink text-white hover:bg-ink/85`;
 const secondary = `${button} border border-line bg-white text-ink hover:border-ink/30`;
+// A picked option (which prompt, which city) is outlined, not filled: solid black means an action.
+const selected = `${button} border-[1.5px] border-ink bg-white text-ink`;
 
 function Logo({ name, size = "size-4", fill }: { name: string; size?: string; fill?: string }) {
   const logo = networkLogos[name] ?? assistantLogos[name as keyof typeof assistantLogos];
@@ -133,7 +135,7 @@ function AssistantCard() {
               setPick(i);
               setConfirms(0);
             }}
-            className={cn(i === pick ? primary : secondary, "h-auto py-2.5 text-left text-[13px] leading-snug sm:justify-start")}
+            className={cn(i === pick ? selected : secondary, "h-auto py-2.5 text-left text-[13px] leading-snug sm:justify-start")}
           >
             {q.ask}
           </button>
@@ -193,7 +195,7 @@ function ZonesCard() {
       </div>
       <div className="mt-auto grid grid-cols-3 gap-2 pt-6">
         {others.map((o, i) => (
-          <button key={o.city} type="button" aria-pressed={i === pick} onClick={() => setPick(i)} className={cn(i === pick ? primary : secondary, "px-2 text-[13px]")}>
+          <button key={o.city} type="button" aria-pressed={i === pick} onClick={() => setPick(i)} className={cn(i === pick ? selected : secondary, "px-2 text-[13px]")}>
             {o.city}
           </button>
         ))}
@@ -215,7 +217,7 @@ function ApprovalsCard() {
         <Logo name="X" size="size-5" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink">Launch thread</span>
-          <span className="block text-xs text-muted">Fri 20 Nov, 10:00</span>
+          <span className="block text-xs text-muted">Thread of 4 posts</span>
         </span>
         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium transition-colors duration-300", approved ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800")}>{s.pill}</span>
       </div>
@@ -330,7 +332,7 @@ function LimitsCard() {
         id="bento-limits"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={3}
+        rows={4}
         className="w-full resize-none rounded-xl border border-line bg-white p-3.5 text-[15px] leading-relaxed text-ink focus-visible:border-ink"
       />
       <ul className="mt-5 flex-1 space-y-4">

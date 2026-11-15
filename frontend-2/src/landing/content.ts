@@ -29,28 +29,6 @@ export const demo = {
   body: "One composer for every network. Write the post, adjust it per account, check it against each network's limits, then schedule it.",
 } as const;
 
-// The composer screen in the hero.
-export const composer = {
-  workspace: "Your brand",
-  nav: ["Compose", "Calendar", "Analytics", "Approvals"],
-  accounts: ["LinkedIn", "X", "Instagram", "YouTube", "Threads"],
-  tabs: ["All networks", "LinkedIn", "X", "Instagram"],
-  activeTab: "X",
-  thread: [
-    "Friday at 10:00 we ship the thing we've been building all year. Here's what's new, in four short posts.",
-    "First, one post tuned for each network: its own caption, title and media per account.",
-  ],
-  limit: 280,
-  checks: [
-    { network: "LinkedIn", note: "within limits" },
-    { network: "X", note: "thread of 4" },
-    { network: "Instagram", note: "4 photos, 1 video" },
-  ],
-  when: { date: "Fri 20 Nov", time: "10:00", zone: "Europe/Berlin" },
-  review: "Needs 1 review",
-  action: "Schedule 3 posts",
-} as const;
-
 export const product = {
   id: "product",
   calendar: {

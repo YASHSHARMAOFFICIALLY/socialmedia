@@ -27,7 +27,11 @@ The real fix is still a photo with clear sky behind the text, as Ribbon and TapM
 
 ## Palette
 Hero: hills photo, soft-focus sky behind the text, white text, white button with play icon, named network
-tags. The composer screen sits in a pure white frame (#ffffff, hairline, one soft shadow).
+tags. Under it, an animated composer (src/landing/stageshow/composer-demo.tsx, built with the
+stageshow kit, MIT): the X tab turns the post into a thread, the three checks tick, Schedule confirms
+"3 posts scheduled". No plate: the window sits on the photo and fades into the white page below
+the payoff. Phones get a redesign (just the schedule panel). Browser-only, with its space reserved
+(CLS 0). Kit vendored in src/landing/stageshow/kit, excluded from lint.
 
 Page (below hero):
 | Token | Value | Use |

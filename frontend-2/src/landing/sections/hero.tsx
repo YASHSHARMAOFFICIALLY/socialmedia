@@ -1,10 +1,11 @@
 import { Fragment } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { hero } from "../content";
 import { gutter } from "../components/layout";
 import { NetworkColumns, NetworkRow } from "../components/network-row";
 import { SkyLife } from "../components/sky-life";
-import { ComposerScreen } from "../screens/composer-screen";
+import { ComposerDemoSlot } from "../stageshow/composer-demo-slot";
 import hills from "../../../public/hero-hills.jpg";
 
 // TapMac/Ribbon-style hero: the hills photo (imageory.in, clouds and wildflowers) settling in
@@ -13,7 +14,8 @@ import hills from "../../../public/hero-hills.jpg";
 // A two-voice headline whose words rise in
 // one by one, and the eleven networks as app icons: two columns either side of the text on wide
 // screens, a row under the button on smaller ones.
-// The composer screen hangs over the bottom edge so the product is visible above the fold.
+// The composer hangs over the bottom edge so the product is visible above the fold: an animated
+// stageshow demo (stageshow/composer-demo.tsx) that shows one post going out to three networks.
 //
 // Storyboard (ms after load):
 //    0  photo starts settling (scale 1.06 to 1 over 2.4s)
@@ -72,7 +74,14 @@ export function Hero() {
           <p className="hero-in mx-auto mt-6 max-w-3xl text-xl leading-snug font-medium text-balance text-white sm:text-2xl" style={{ animationDelay: `${TIMING.body}ms` }}>
             {hero.body}
           </p>
-          <div className="hero-in mt-9 flex justify-center" style={{ animationDelay: `${TIMING.cta}ms` }}>
+          <div className="hero-in mt-9 flex flex-wrap items-center justify-center gap-3" style={{ animationDelay: `${TIMING.cta}ms` }}>
+            {/* The one solid action: sign-up is live. "See what it does" stays as the second, lighter choice. */}
+            <Link
+              href="/signup"
+              className="inline-flex min-h-13 items-center rounded-full bg-ink px-7 text-base font-semibold text-white shadow-[0_12px_32px_rgb(4_40_90/0.35)] transition-transform duration-200 ease-out hover:-translate-y-0.5"
+            >
+              Create your account
+            </Link>
             <a
               href={hero.primary.href}
               className="group inline-flex min-h-13 items-center gap-3 rounded-full bg-linear-to-b from-white to-[#eef4fb] py-1.5 pr-7 pl-1.5 text-base font-semibold text-ink shadow-[inset_0_1px_0_#fff,0_0_0_1px_rgb(255_255_255/0.6),0_12px_32px_rgb(4_40_90/0.35)] transition-transform duration-200 ease-out hover:-translate-y-0.5"
@@ -90,10 +99,7 @@ export function Hero() {
       </div>
 
       <div className={`${gutter} hero-in relative z-10 -mt-32 sm:-mt-40`} style={{ animationDelay: `${TIMING.screen}ms` }}>
-        {/* White frame around the product screen (#ffffff, like the rest of the page). */}
-        <div className="rounded-[30px] border border-line bg-white p-2.5 shadow-[0_30px_80px_-20px_rgb(4_40_90/0.35)] sm:p-3.5">
-          <ComposerScreen />
-        </div>
+        <ComposerDemoSlot />
       </div>
     </section>
   );
