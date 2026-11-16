@@ -4,6 +4,8 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // No public preview URLs: uploaded-but-undeployed versions must not be reachable.
+  "preview_urls": false,
   "vars": { "NODE_ENV": "production", "LOG_LEVEL": "info", "CORS_ORIGINS": "https://socialmedia-web.yashsharmaofficially1.workers.dev" },
   // Create with: wrangler hyperdrive create social-db --connection-string="<neon DIRECT connection string>" --caching-disabled
   // Caching MUST stay off: Hyperdrive serves cached SELECTs for 60s and never invalidates them on writes, which breaks every
