@@ -5,7 +5,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   "vars": { "NODE_ENV": "production", "LOG_LEVEL": "info", "CORS_ORIGINS": "https://socialmedia-web.yashsharmaofficially1.workers.dev" },
-  // Create with: wrangler hyperdrive create social-db --connection-string="<neon DIRECT connection string>"
+  // Create with: wrangler hyperdrive create social-db --connection-string="<neon DIRECT connection string>" --caching-disabled
+  // Caching MUST stay off: Hyperdrive serves cached SELECTs for 60s and never invalidates them on writes, which breaks every
+  // read-modify-write here (Better Auth's DB rate limiter loops until "Too many subrequests", job leases, sessions after sign-out).
   // Local dev uses CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=<postgres url>
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "5c716710e8024a0484c8aa932c5a0882" }],
   // Delivery only: Postgres (jobs + outbox) is the source of truth, the sweeper re-enqueues anything lost.
