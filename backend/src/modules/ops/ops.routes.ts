@@ -40,7 +40,7 @@ export function opsRoutes(d: { db: Db; log: Logger; opsToken?: string | undefine
     const [scalars, workers, tables, accounts, publishing, subs, failures, dlq] = await Promise.allSettled([
       q<Record<string, unknown>>(`SELECT
         pg_database_size(current_database())::float8 AS db_bytes,
-        current_setting('neon.max_cluster_size', true) AS neon_max_mb,
+        (SELECT setting FROM pg_settings WHERE name = 'neon.max_cluster_size') AS neon_max_mb,
         (SELECT count(*) FROM publishing_jobs WHERE status = 'pending')::int AS pending,
         (SELECT count(*) FROM publishing_jobs WHERE status = 'pending' AND next_attempt_at <= now())::int AS pending_due,
         (SELECT EXTRACT(EPOCH FROM now() - min(next_attempt_at))::int FROM publishing_jobs WHERE status = 'pending' AND next_attempt_at <= now()) AS oldest_pending_s,
@@ -63,8 +63,9 @@ export function opsRoutes(d: { db: Db; log: Logger; opsToken?: string | undefine
         (SELECT COALESCE(sum(count) FILTER (WHERE status >= 500), 0)::int FROM request_metrics WHERE minute >= now() - interval '1 hour') AS errors_1h,
         (SELECT min(minute) FROM request_metrics) AS metrics_since`).then((x) => x[0]!),
       workerStatus(d.db),
-      q<{ name: string; total_bytes: number; rows: number }>(`SELECT c.relname AS name, pg_total_relation_size(c.oid)::float8 AS total_bytes, GREATEST(c.reltuples, 0)::float8 AS rows
-         FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace WHERE c.relkind = 'r' AND ns.nspname = 'public' ORDER BY 2 DESC LIMIT 12`),
+      // Row counts are the statistics collector's live-tuple estimate (exact counts would scan every table).
+      q<{ name: string; total_bytes: number; rows: number }>(`SELECT s.relname AS name, pg_total_relation_size(s.relid)::float8 AS total_bytes, s.n_live_tup::float8 AS rows
+         FROM pg_stat_user_tables s WHERE s.schemaname = 'public' ORDER BY 2 DESC LIMIT 12`),
       q<{ platform: string; active: number; needs_reauth: number; disconnected: number }>(`SELECT platform, count(*) FILTER (WHERE status = 'active')::int AS active,
          count(*) FILTER (WHERE status = 'needs_reauth')::int AS needs_reauth, count(*) FILTER (WHERE status = 'disconnected')::int AS disconnected
          FROM social_accounts GROUP BY 1 ORDER BY 2 DESC, 1`),
