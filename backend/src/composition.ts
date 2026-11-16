@@ -61,7 +61,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
     ...(cfg.LINKEDIN_CLIENT_ID && cfg.LINKEDIN_CLIENT_SECRET ? [createLinkedInAdapter({ clientId: cfg.LINKEDIN_CLIENT_ID, clientSecret: cfg.LINKEDIN_CLIENT_SECRET })] : []),
     ...(cfg.X_CLIENT_ID && cfg.X_CLIENT_SECRET ? [createXAdapter({ clientId: cfg.X_CLIENT_ID, clientSecret: cfg.X_CLIENT_SECRET })] : []),
     ...(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET ? [createYouTubeAdapter({ clientId: cfg.GOOGLE_CLIENT_ID, clientSecret: cfg.GOOGLE_CLIENT_SECRET })] : []),
-    ...(cfg.INSTAGRAM_APP_ID && cfg.INSTAGRAM_APP_SECRET ? [createInstagramAdapter({ clientId: cfg.INSTAGRAM_APP_ID, clientSecret: cfg.INSTAGRAM_APP_SECRET })] : []),
+    ...(cfg.FACEBOOK_APP_ID && cfg.FACEBOOK_APP_SECRET ? [createInstagramAdapter({ clientId: cfg.FACEBOOK_APP_ID, clientSecret: cfg.FACEBOOK_APP_SECRET, configId: cfg.INSTAGRAM_FB_CONFIG_ID })] : []),   // Instagram API with Facebook Login: same Meta app
     ...(cfg.THREADS_APP_ID && cfg.THREADS_APP_SECRET ? [createThreadsAdapter({ clientId: cfg.THREADS_APP_ID, clientSecret: cfg.THREADS_APP_SECRET })] : []),
     ...(cfg.FACEBOOK_APP_ID && cfg.FACEBOOK_APP_SECRET ? [createFacebookAdapter({ clientId: cfg.FACEBOOK_APP_ID, clientSecret: cfg.FACEBOOK_APP_SECRET })] : []),
     ...(cfg.PINTEREST_APP_ID && cfg.PINTEREST_APP_SECRET ? [createPinterestAdapter({ clientId: cfg.PINTEREST_APP_ID, clientSecret: cfg.PINTEREST_APP_SECRET })] : []),

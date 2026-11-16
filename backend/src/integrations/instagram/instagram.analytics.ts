@@ -3,10 +3,10 @@ import type { AudienceResult, AudienceRow, MetricsResult, RawMetric, SocialAdapt
 import { GRAPH } from "./instagram.auth.js";
 
 // Verified (Instagram Platform insights docs, IG Media insights reference): GET /<MEDIA_ID>/insights?metric=... with permission
-// instagram_business_manage_insights; media metrics comments, likes, views, reach, saved, shares, reposts, profile_visits, ig_reels_avg_watch_time.
+// instagram_manage_insights; media metrics comments, likes, views, reach, saved, shares, reposts, profile_visits, ig_reels_avg_watch_time.
 // `impressions` is deprecated for media created after 2024-07-02 and is not requested. Data may lag up to 48 h.
 // "If insights data does not exist or is unavailable the API returns an EMPTY data set instead of 0": absent metric => `unavailable`.
-// Account followers: GET /me?fields=followers_count.
+// Account followers: GET /<IG_ID>?fields=followers_count.
 export const POST_METRICS = ["views", "reach", "likes", "comments", "saved", "shares", "reposts", "profile_visits", "ig_reels_avg_watch_time"];
 
 // Account insights (Instagram Platform "IG User insights", verified): GET /<IG_ID>/insights?metric=...&period=day&metric_type=total_value returns each
@@ -47,7 +47,7 @@ export function createInstagramAnalytics(f: typeof fetch = fetch): Pick<SocialAd
       return { metrics, raw, source };
     },
     async fetchAccountMetrics({ accessToken, account }): Promise<MetricsResult> {
-      const source = `${GRAPH}/me?fields=followers_count`;
+      const source = `${GRAPH}/${account.externalId}?fields=followers_count`; // a Page token's /me is the Page, not the IG account
       const res = await platformFetch(f, "instagram", source, { headers: headers(accessToken) });
       const body = (await res.json()) as { followers_count?: number; data?: { followers_count?: number }[] };
       const v = body.followers_count ?? body.data?.[0]?.followers_count;

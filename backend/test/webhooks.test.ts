@@ -128,8 +128,8 @@ describe("outbound webhooks", async () => {
 });
 
 describe("inbound platform webhooks (Instagram)", async () => {
-  const SECRET = "ig-app-secret-for-tests";
-  const t: T = await createTestApp([], { env: { INSTAGRAM_APP_SECRET: SECRET, INSTAGRAM_WEBHOOK_VERIFY_TOKEN: "verify-token-1234567890" } });
+  const SECRET = "fb-app-secret-for-tests";
+  const t: T = await createTestApp([], { env: { FACEBOOK_APP_SECRET: SECRET, INSTAGRAM_WEBHOOK_VERIFY_TOKEN: "verify-token-1234567890" } });
   afterAll(t.close);
   const signed = (obj: object) => { const payload = Buffer.from(JSON.stringify(obj)).toString("base64url"); return `${createHmac("sha256", SECRET).update(payload).digest("base64url")}.${payload}`; };
 

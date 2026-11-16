@@ -13,12 +13,23 @@ import { NO_CAPABILITIES, type ConnectedAccount, type RawMetric, type SocialAdap
 // The value envelope is the standard Insights shape (Meta's reference page does not spell it out); comments/shares come from the post edge itself.
 // Meta announced another batch of Page metric deprecations for 2026-06-15: an invalid metric surfaces as a failed collection, not as zeros.
 // Not verified here (so not claimed): long-lived/never-expiring Page token mechanics beyond the standard fb_exchange_token flow.
-const V = "v27.0";
-const GRAPH = `https://graph.facebook.com/${V}`;
+export const V = "v27.0";
+export const GRAPH = `https://graph.facebook.com/${V}`;
 export const FACEBOOK_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "read_insights", "publish_video"];
 
 const POST_METRICS = ["post_media_view", "post_total_media_view_unique", "post_clicks", "post_reactions_by_type_total"];
 const num = (originalName: string, v: unknown): RawMetric => typeof v === "number" ? { originalName, value: v, availability: "available" } : { originalName, value: null, availability: "unavailable" };
+
+/** Facebook Login code -> short-lived -> long-lived user token (shared with Instagram, which also connects through Facebook Login). */
+export async function longLivedUserToken(f: typeof fetch, platform: string, cfg: { clientId: string; clientSecret: string }, code: string, redirectUri: string): Promise<string> {
+  const s = await metaFetch(f, platform, `${GRAPH}/oauth/access_token?${new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, redirect_uri: redirectUri, code })}`);
+  const short = ((await s.json()) as { access_token?: string }).access_token;
+  if (!short) throw new PlatformError("permanent", `${platform} token response missing access_token`);
+  const l = await metaFetch(f, platform, `${GRAPH}/oauth/access_token?${new URLSearchParams({ grant_type: "fb_exchange_token", client_id: cfg.clientId, client_secret: cfg.clientSecret, fb_exchange_token: short })}`);
+  const long = ((await l.json()) as { access_token?: string }).access_token;
+  if (!long) throw new PlatformError("permanent", `${platform} long-lived exchange failed`);
+  return long;
+}
 
 export function createFacebookAdapter(cfg: { clientId: string; clientSecret: string }, f: typeof fetch = fetch): SocialAdapter {
   const auth = (t: string) => ({ authorization: `Bearer ${t}` });
@@ -39,13 +50,7 @@ export function createFacebookAdapter(cfg: { clientId: string; clientSecret: str
       usesPkce: false,
       authorizationUrl: ({ state, redirectUri }) => `https://www.facebook.com/${V}/dialog/oauth?${new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri, scope: FACEBOOK_SCOPES.join(","), response_type: "code", state })}`,
       async exchangeCode({ code, redirectUri }) {
-        const s = await metaFetch(f, "facebook", `${GRAPH}/oauth/access_token?${new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, redirect_uri: redirectUri, code })}`);
-        const short = ((await s.json()) as { access_token?: string }).access_token;
-        if (!short) throw new PlatformError("permanent", "facebook token response missing access_token");
-        const l = await metaFetch(f, "facebook", `${GRAPH}/oauth/access_token?${new URLSearchParams({ grant_type: "fb_exchange_token", client_id: cfg.clientId, client_secret: cfg.clientSecret, fb_exchange_token: short })}`);
-        const long = (await l.json()) as { access_token?: string; expires_in?: number };
-        if (!long.access_token) throw new PlatformError("permanent", "facebook long-lived exchange failed");
-        return { accessToken: long.access_token, scopes: FACEBOOK_SCOPES }; // the user token is only used to list Pages; Page tokens are what get stored
+        return { accessToken: await longLivedUserToken(f, "facebook", cfg, code, redirectUri), scopes: FACEBOOK_SCOPES }; // the user token is only used to list Pages; Page tokens are what get stored
       },
     },
     async fetchAccount(): Promise<never> { throw new PlatformError("permanent", "facebook connects Pages through listAccounts"); },

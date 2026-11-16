@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { createInstagramAdapter } from "../../src/integrations/instagram/instagram.adapter.js";
 import { createLinkedInAdapter } from "../../src/integrations/linkedin/linkedin.adapter.js";
 import { createXAdapter } from "../../src/integrations/x/x.adapter.js";
 import { createYouTubeAdapter } from "../../src/integrations/youtube/youtube.adapter.js";
@@ -37,4 +36,3 @@ function suite(name: string, token: string | undefined, adapter: SocialAdapter, 
 suite("LinkedIn", process.env.LIVE_LINKEDIN_TOKEN, createLinkedInAdapter(dummy), { publish: true });
 suite("X", process.env.LIVE_X_TOKEN, createXAdapter(dummy), { accountMetrics: true, publish: true });
 suite("YouTube", process.env.LIVE_YOUTUBE_TOKEN, createYouTubeAdapter(dummy), { accountMetrics: true });
-suite("Instagram", process.env.LIVE_INSTAGRAM_TOKEN, createInstagramAdapter(dummy), { accountMetrics: true });

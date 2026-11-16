@@ -203,21 +203,38 @@ describe("YouTube adapter (mocked API)", () => {
 
 describe("Instagram adapter (mocked API)", () => {
   const ad = (f: typeof fetch) => createInstagramAdapter({ clientId: "app", clientSecret: "sec", pollMs: 1 }, f);
-  it("exchanges the code for a short-lived then a long-lived (60 day) token", async () => {
-    const h = harness((c) => c.url.startsWith("https://api.instagram.com/oauth/access_token")
-      ? Response.json({ data: [{ access_token: "SHORT", user_id: "1", permissions: "instagram_business_basic,instagram_business_content_publish" }] })
-      : Response.json({ access_token: "LONG", token_type: "bearer", expires_in: 5183944 }));
-    const t = await ad(h.f).oauth.exchangeCode({ code: "C", redirectUri: "https://api/cb" });
-    expect(h.calls[1]!.url).toContain("grant_type=ig_exchange_token");
-    expect(h.calls[1]!.url).toContain("access_token=SHORT");
-    expect(t).toMatchObject({ accessToken: "LONG", refreshToken: "LONG", scopes: ["instagram_business_basic", "instagram_business_content_publish"] });
-    expect(t.expiresAt!.getTime()).toBeGreaterThan(Date.now() + 5_000_000_000);
+  it("authorizes through the Facebook Login dialog: scope list by default, config_id when configured", () => {
+    const u = new URL(ad(fetch).oauth.authorizationUrl({ state: "S", redirectUri: "https://api/oauth/instagram/callback" }));
+    expect(u.origin + u.pathname).toBe("https://www.facebook.com/v27.0/dialog/oauth");
+    expect(u.searchParams.get("client_id")).toBe("app");
+    expect(u.searchParams.get("redirect_uri")).toBe("https://api/oauth/instagram/callback");
+    expect(u.searchParams.get("scope")).toBe("instagram_basic,instagram_content_publish,instagram_manage_insights,pages_show_list,pages_read_engagement,business_management");
+    expect(u.searchParams.get("config_id")).toBeNull();
+    const c = new URL(createInstagramAdapter({ clientId: "app", clientSecret: "sec", configId: "CFG" }, fetch).oauth.authorizationUrl({ state: "S", redirectUri: "https://api/cb" }));
+    expect(c.searchParams.get("config_id")).toBe("CFG");
+    expect(c.searchParams.get("scope")).toBeNull();
   });
-  it("refreshes a long-lived token through ig_refresh_token", async () => {
-    const h = harness(() => Response.json({ access_token: "NEW", expires_in: 5183944 }));
-    expect((await ad(h.f).oauth.refresh!("OLD")).accessToken).toBe("NEW");
-    expect(h.calls[0]!.url).toContain("refresh_access_token");
-    expect(h.calls[0]!.url).toContain("grant_type=ig_refresh_token");
+  it("exchanges the code for a long-lived Facebook user token, then connects each Page-linked Instagram account with the Page token", async () => {
+    const h = harness((c) => c.url.includes("oauth/access_token") ? Response.json({ access_token: c.url.includes("fb_exchange_token") ? "LONG" : "SHORT" })
+      : Response.json({ data: [
+        { id: "p1", name: "Shop", access_token: "PT1", instagram_business_account: { id: "1784", username: "shop.ig", profile_picture_url: "https://pic" } },
+        { id: "p2", name: "No IG", access_token: "PT2" }] }));
+    const a = ad(h.f);
+    const t = await a.oauth.exchangeCode({ code: "C", redirectUri: "https://api/cb" });
+    expect(h.calls[0]!.url).toMatch(/^https:\/\/graph\.facebook\.com\/v27\.0\/oauth\/access_token\?/);
+    expect(h.calls[1]!.url).toContain("grant_type=fb_exchange_token");
+    expect(t.accessToken).toBe("LONG");
+    const found = await a.listAccounts!(t);
+    const me = new URL(h.calls[2]!.url);
+    expect(me.origin + me.pathname).toBe("https://graph.facebook.com/v27.0/me/accounts");
+    expect(me.searchParams.get("fields")).toContain("instagram_business_account{id,username,profile_picture_url}");
+    expect(h.calls[2]!.headers.authorization).toBe("Bearer LONG");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ profile: { externalId: "1784", username: "shop.ig", avatarUrl: "https://pic", metadata: { pageId: "p1" } }, tokens: { accessToken: "PT1" } });
+  });
+  it("fails the connect with a clear message when no granted Page has a linked Instagram account", async () => {
+    const h = harness(() => Response.json({ data: [{ id: "p2", name: "No IG", access_token: "PT2" }] }));
+    await expect(ad(h.f).listAccounts!({ accessToken: "LONG", scopes: [] })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/Instagram professional account/) });
   });
   it("publishes an image: container -> status FINISHED -> media_publish -> permalink", async () => {
     let status = 0;
@@ -228,6 +245,7 @@ describe("Instagram adapter (mocked API)", () => {
       return Response.json({ permalink: "https://instagram.com/p/abc" });
     });
     const r = await ad(h.f).publish!(input(content({ hashtags: ["x"] }), [mk("image", 10)]));
+    expect(h.calls[0]!.url).toBe("https://graph.facebook.com/v27.0/u1/media");
     expect(h.calls[0]!.body).toEqual({ image_url: "https://r2.example/obj", caption: "Hello\n\n#x" });
     expect(h.calls[0]!.headers.authorization).toBe("Bearer TOKEN");
     expect(h.calls.find((c) => c.url.endsWith("media_publish"))!.body).toEqual({ creation_id: "CON1" });
@@ -277,6 +295,7 @@ describe("Instagram adapter (mocked API)", () => {
     const r = await a.fetchAccountMetrics!({ accessToken: "T", account: acct });
     const by = Object.fromEntries(r.metrics.map((m) => [m.originalName, m]));
     expect(by.followers_count).toMatchObject({ value: 1234, availability: "available" });
+    expect(h.calls[0]!.url).toBe("https://graph.facebook.com/v27.0/17841?fields=followers_count");   // a Page token's /me is the Page, not the IG account
     expect(by.reach).toMatchObject({ value: 321, period: "day", availability: "available" });
     expect(by.views).toMatchObject({ value: null, availability: "unavailable", period: "day" });     // refused: unavailable, not 0
     const groupedUrl = new URL(h.calls.find((c) => c.url.includes("/insights"))!.url);

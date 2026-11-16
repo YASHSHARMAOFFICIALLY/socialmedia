@@ -15,8 +15,7 @@ const schema = z.object({
   X_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),   // YouTube
   GOOGLE_CLIENT_SECRET: z.string().optional(),
-  INSTAGRAM_APP_ID: z.string().optional(),   // Instagram App ID (not the Facebook app id)
-  INSTAGRAM_APP_SECRET: z.string().optional(),
+  INSTAGRAM_FB_CONFIG_ID: z.string().optional(),   // Facebook Login for Business configuration id for Instagram; unset = send the scope list
   INSTAGRAM_WEBHOOK_VERIFY_TOKEN: z.string().min(16).optional(),   // the 'Verify Token' configured for Instagram webhooks in the Meta dashboard
   THREADS_APP_ID: z.string().optional(),     // Threads app id (Meta app > Threads use case)
   THREADS_APP_SECRET: z.string().optional(),
