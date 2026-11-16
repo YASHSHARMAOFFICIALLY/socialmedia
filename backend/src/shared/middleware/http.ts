@@ -1,4 +1,4 @@
-import type { ErrorRequestHandler, RequestHandler } from "express";
+import type { ErrorRequestHandler, Request, RequestHandler } from "express";
 import { ZodError } from "zod";
 import { randomUUID } from "node:crypto";
 import { AppError } from "../errors/errors.js";
@@ -17,7 +17,7 @@ export const notFoundHandler: RequestHandler = (req, res) => {
   res.status(404).json({ error: { code: "NOT_FOUND", message: "Route not found", requestId: req.id } });
 };
 
-export const errorHandler = (log: Logger): ErrorRequestHandler => (err, req, res, _next) => {
+export const errorHandler = (log: Logger, onUnhandled?: (req: Request, err: unknown) => void): ErrorRequestHandler => (err, req, res, _next) => {
   if (err instanceof ZodError) {
     res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid input", details: err.flatten(), requestId: req.id } });
     return;
@@ -31,5 +31,6 @@ export const errorHandler = (log: Logger): ErrorRequestHandler => (err, req, res
     return;
   }
   log.error({ err, requestId: req.id }, "unhandled error");
+  onUnhandled?.(req, err);
   res.status(500).json({ error: { code: "INTERNAL", message: "Internal server error", requestId: req.id } });
 };

@@ -1,12 +1,10 @@
-import { timingSafeEqual } from "node:crypto";
 import { Router } from "express";
 import type { Db } from "../../infrastructure/database/db.js";
 import { workerStatus } from "../../workers/heartbeat.js";
+import { opsAuth } from "../../shared/middleware/ops-auth.js";
 
 const withTimeout = <T>(p: Promise<T>, ms = 3000) =>
   Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
-
-const safeEq = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };   // byte lengths: non-ASCII input must not throw
 
 export function healthRoutes(deps: { db: Db; opsToken?: string | undefined }) {
   const r = Router();
@@ -32,10 +30,7 @@ export function healthRoutes(deps: { db: Db; opsToken?: string | undefined }) {
   });
   // Backlog and failure counters derived from Postgres (Cloudflare Queues has no depth API for Workers). For uptime monitors / alerting.
   // Disabled (404) unless OPS_TOKEN is configured; compared in constant time.
-  r.get("/health/queues", async (req, res) => {
-    if (!deps.opsToken) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Route not found", requestId: req.id } }); return; }
-    const given = /^Bearer (.+)$/.exec(req.header("authorization") ?? "")?.[1] ?? "";
-    if (!safeEq(given, deps.opsToken)) { res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: req.id } }); return; }
+  r.get("/health/queues", opsAuth(deps.opsToken), async (req, res) => {
     try {
       const q = (await withTimeout(deps.db.query<Record<string, number | null>>(
         `SELECT

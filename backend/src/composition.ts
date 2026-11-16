@@ -53,9 +53,10 @@ import { createBillingPayments } from "./modules/billing/billing.payments.js";
 import { createMcpAuth } from "./modules/mcp/mcp.auth.js";
 import { createBillingService } from "./modules/billing/billing.service.js";
 import { createAccountService } from "./modules/accounts/account.service.js";
+import { createMetrics } from "./modules/ops/metrics.js";
 
 /** Composition root: the only place concrete implementations are wired together. */
-export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: Mailer; adapters?: SocialAdapter[]; queue: JobQueue; analyticsQueue: JobQueue<AnalyticsMessage>; cache?: CacheStore; engine?: Partial<EngineDeps>; storage?: ObjectStorage | null; webhookFetch?: typeof fetch; aiProvider?: AiProvider | null; images?: ImageTransformer | null; videos?: VideoTransformer | null; payments?: PaymentProvider | null }): Promise<Deps> {
+export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: Mailer; adapters?: SocialAdapter[]; queue: JobQueue; analyticsQueue: JobQueue<AnalyticsMessage>; cache?: CacheStore; engine?: Partial<EngineDeps>; storage?: ObjectStorage | null; webhookFetch?: typeof fetch; aiProvider?: AiProvider | null; images?: ImageTransformer | null; videos?: VideoTransformer | null; payments?: PaymentProvider | null; defer?: (p: Promise<unknown>) => void }): Promise<Deps> {
   const mailer = o.mailer ?? createMailer({ apiKey: cfg.RESEND_API_KEY }, log);
   const adapters = o.adapters ?? [
     ...(cfg.LINKEDIN_CLIENT_ID && cfg.LINKEDIN_CLIENT_SECRET ? [createLinkedInAdapter({ clientId: cfg.LINKEDIN_CLIENT_ID, clientSecret: cfg.LINKEDIN_CLIENT_SECRET })] : []),
@@ -117,5 +118,5 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
   const mcpAuth = createMcpAuth({ db, workspaces });
   const provider = o.payments !== undefined ? o.payments : cfg.DODO_API_KEY && cfg.DODO_WEBHOOK_KEY ? createDodoProvider({ apiKey: cfg.DODO_API_KEY, webhookKey: cfg.DODO_WEBHOOK_KEY, mode: cfg.DODO_MODE }) : null;
   const billingPayments = createBillingPayments({ db, workspaces, provider, log, returnUrl: cfg.APP_URL ?? cfg.BETTER_AUTH_URL ?? "", notify: async (q, ws, type, title, body, ref) => notifications.notify(q, { workspaceId: ws, userIds: await notifications.holders(q, ws, "billing:manage"), type, title, body, ref }) });
-  return { cfg, log, db, auth: createAuth(db, cfg, mailer), workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns: createCampaignService({ db, workspaces, analytics }), approvals, notifications, reports, recurring, webhooks, competitors, ai, billing, billingPayments, mcpAuth, insights: createInsightsService({ db, workspaces, analytics }), storage, engine };
+  return { cfg, log, db, auth: createAuth(db, cfg, mailer), workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns: createCampaignService({ db, workspaces, analytics }), approvals, notifications, reports, recurring, webhooks, competitors, ai, billing, billingPayments, mcpAuth, metrics: createMetrics({ db, log, defer: o.defer }), insights: createInsightsService({ db, workspaces, analytics }), storage, engine };
 }

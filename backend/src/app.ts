@@ -72,6 +72,8 @@ import { registerAuthDocs, registerWorkspaceDocs } from "./modules/workspaces/wo
 import { errorHandler, notFoundHandler, requestId } from "./shared/middleware/http.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { registerHealthDocs } from "./modules/health/health.openapi.js";
+import { opsRoutes } from "./modules/ops/ops.routes.js";
+import type { Metrics } from "./modules/ops/metrics.js";
 
 /** Background-side handles (queue consumer + cron) built by the composition root; the HTTP app does not call them directly. */
 export interface Engine {
@@ -94,11 +96,11 @@ export interface Engine {
   recurring: { sweep(): Promise<{ materialized: number; scheduled: number; failed: number; skipped: number }> };
   tokens: { keepAlive(): Promise<{ due: number; refreshed: number; failed: number }>; reencryptStale(): Promise<{ rewritten: number; remaining: number | string }> };
 }
-export interface Deps { cfg: Config; log: Logger; db: Db; auth: Auth; workspaces: WorkspaceService; accounts: AccountService; content: ContentService; publishing: PublishingService; media: MediaService; scheduling: SchedulingService; analytics: AnalyticsService; campaigns: CampaignService; approvals: ApprovalService; notifications: NotificationService; insights: InsightsService; reports: ReportService; recurring: RecurringService; webhooks: WebhookService; competitors: CompetitorService; ai: AiService; billing: BillingService; billingPayments: BillingPayments; mcpAuth: McpAuth; storage?: import("./infrastructure/storage/storage.js").ObjectStorage | null; engine: Engine }
+export interface Deps { cfg: Config; log: Logger; db: Db; auth: Auth; workspaces: WorkspaceService; accounts: AccountService; content: ContentService; publishing: PublishingService; media: MediaService; scheduling: SchedulingService; analytics: AnalyticsService; campaigns: CampaignService; approvals: ApprovalService; notifications: NotificationService; insights: InsightsService; reports: ReportService; recurring: RecurringService; webhooks: WebhookService; competitors: CompetitorService; ai: AiService; billing: BillingService; billingPayments: BillingPayments; mcpAuth: McpAuth; metrics?: Metrics; storage?: import("./infrastructure/storage/storage.js").ObjectStorage | null; engine: Engine }
 
 let docsRegistered = false;
 
-export function createApp({ cfg, log, db, auth, workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns, approvals, notifications, insights, reports, recurring, webhooks, competitors, ai, billing, billingPayments, mcpAuth }: Deps) {
+export function createApp({ cfg, log, db, auth, workspaces, accounts, content, publishing, media, scheduling, analytics, campaigns, approvals, notifications, insights, reports, recurring, webhooks, competitors, ai, billing, billingPayments, mcpAuth, metrics }: Deps) {
   if (!docsRegistered) {   // the registry is process-wide: register each module's paths exactly once
     docsRegistered = true;
     registerHealthDocs(registry);
@@ -126,6 +128,7 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
   app.disable("x-powered-by");
   app.set("trust proxy", 1); // behind Cloudflare / one proxy hop
   app.use(requestId);
+  if (metrics) app.use(metrics.middleware());   // owner dashboard: latency/status per route group, written in batches after the response
   // pino-http needs pino internals absent from pino's browser build (used on Workers), so log requests directly.
   app.use((req, res, next) => {
     const t = Date.now();
@@ -183,12 +186,13 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
   app.use("/webhooks", hookLimit({ name: "platform-webhooks", limit: 600, windowS: 60, key: (req) => req.header("cf-connecting-ip") ?? req.ip ?? "unknown" }));
   app.use(billingWebhookRoutes(billingPayments));
   app.use(billingAdminRoutes({ db, pay: billingPayments, opsToken: cfg.OPS_TOKEN }));
+  app.use(opsRoutes({ db, log, opsToken: cfg.OPS_TOKEN }));
   app.use(mcpRoutes({ auth: mcpAuth, deps: { db, log, workspaces, accounts, content, analytics, billing, billingPayments, publishing, confirmSecret: cfg.BETTER_AUTH_SECRET ?? "" }, log, publicUrl: cfg.BETTER_AUTH_URL, appUrl: cfg.APP_URL, allowedOrigins: cfg.CORS_ORIGINS, authed, limit }));
   app.use(inboundWebhookRoutes({ db, log, instagramAppSecret: cfg.FACEBOOK_APP_SECRET, instagramVerifyToken: cfg.INSTAGRAM_WEBHOOK_VERIFY_TOKEN, publicUrl: cfg.BETTER_AUTH_URL ?? "", disconnect: accounts.disconnectByExternalId }));
   app.get("/openapi.json", (_req, res) => res.json(buildSpec()));
   app.get("/docs", docsPage);
 
   app.use(notFoundHandler);
-  app.use(errorHandler(log));
+  app.use(errorHandler(log, metrics ? (req, err) => metrics.captureError(req, err) : undefined));
   return app;
 }

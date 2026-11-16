@@ -1,13 +1,12 @@
-import { timingSafeEqual } from "node:crypto";
-import { Router, type RequestHandler } from "express";
+import { Router } from "express";
 import { z } from "zod";
 import type { Db } from "../../infrastructure/database/db.js";
 import { badRequest, notFound } from "../../shared/errors/errors.js";
 import { validate } from "../../shared/middleware/validate.js";
+import { opsAuth } from "../../shared/middleware/ops-auth.js";
 import { auditRepository } from "../audit/audit.repository.js";
 import type { BillingPayments } from "./billing.payments.js";
 
-const eq = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };   // compare BYTE lengths: non-ASCII input must not throw
 const price = z.object({ currency: z.enum(["INR", "USD"]), interval: z.enum(["month", "year"]), amountMinor: z.number().int().min(0).max(100_000_000_00) });
 const entitlement = z.object({ feature: z.string().regex(/^[a-z_]{2,40}$/), kind: z.enum(["flag", "value", "count", "metered"]), limit: z.number().int().min(0).nullable() });
 export const newVersionBody = z.object({ prices: z.array(price).max(8), entitlements: z.array(entitlement).min(1).max(40) })
@@ -20,13 +19,7 @@ export const newVersionBody = z.object({ prices: z.array(price).max(8), entitlem
  */
 export function billingAdminRoutes(d: { db: Db; pay: BillingPayments; opsToken?: string | undefined }) {
   const r = Router();
-  const ops: RequestHandler = (req, res, next) => {
-    if (!d.opsToken) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Route not found", requestId: req.id } }); return; }
-    const given = /^Bearer (.+)$/.exec(req.header("authorization") ?? "")?.[1] ?? "";
-    if (!eq(given, d.opsToken)) { res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required", requestId: req.id } }); return; }
-    next();
-  };
-  r.use("/admin/billing", ops);
+  r.use("/admin/billing", opsAuth(d.opsToken));
   const audit = (req: { id?: string }, action: string, entityId: string, metadata: Record<string, unknown>) => auditRepository.record(d.db, { workspaceId: null, actorId: null, action, entityType: "billing_admin", entityId, metadata, ...(req.id ? { requestId: req.id } : {}) });
 
   r.get("/admin/billing/webhook-events", validate({ query: z.object({ status: z.enum(["received", "failed", "processed", "ignored"]).default("failed"), limit: z.coerce.number().int().min(1).max(100).default(50) }) }), async (req, res) => {

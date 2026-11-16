@@ -10,5 +10,8 @@ export async function purgeOldRows(db: Db) {
     // dispatched outbox rows and old worker heartbeats carry no information once delivered
     outbox: await del("DELETE FROM outbox_events WHERE dispatched_at < now() - interval '14 days'"),
     expiredInvitations: await del("DELETE FROM workspace_invitations WHERE expires_at < now() - interval '30 days' AND accepted_at IS NULL"),
+    // owner dashboard history is kept for 30 days
+    requestMetrics: await del("DELETE FROM request_metrics WHERE minute < now() - interval '30 days'"),
+    serverErrors: await del("DELETE FROM server_errors WHERE created_at < now() - interval '30 days'"),
   };
 }

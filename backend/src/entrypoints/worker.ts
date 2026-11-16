@@ -1,5 +1,5 @@
 // Cloudflare Workers entrypoint: HTTP (Express), scheduled (cron). Queue consumers are added in Phase 5.
-import { env } from "cloudflare:workers";
+import { env, waitUntil } from "cloudflare:workers";
 import { httpServerHandler } from "cloudflare:node";
 import express from "express";
 import { createApp, type Deps } from "../app.js";
@@ -19,7 +19,7 @@ let deps: Promise<Deps> | undefined;
 const getDeps = () =>
   (deps ??= (async () => {
     const cfg = loadConfig(bindings);
-    return buildDeps(cfg, createLogger(cfg), hyperdriveDb(bindings.HYPERDRIVE.connectionString), { queue: cloudflareQueue(bindings.PUBLISH_QUEUE), analyticsQueue: cloudflareQueue<{ targetId: string }>(bindings.ANALYTICS_QUEUE), ...(bindings.CACHE ? { cache: createKvCache(bindings.CACHE as never) } : {}) });
+    return buildDeps(cfg, createLogger(cfg), hyperdriveDb(bindings.HYPERDRIVE.connectionString), { queue: cloudflareQueue(bindings.PUBLISH_QUEUE), analyticsQueue: cloudflareQueue<{ targetId: string }>(bindings.ANALYTICS_QUEUE), ...(bindings.CACHE ? { cache: createKvCache(bindings.CACHE as never) } : {}), defer: (p) => waitUntil(p) });
   })());
 
 let inner: express.Express | undefined;
@@ -33,11 +33,14 @@ export default {
   ...http,
   /** Queue consumer: publish jobs. */
   async queue(batch: MessageBatch<unknown>) {
-    const { engine, db, log } = await getDeps();
+    const { engine, db, log, metrics } = await getDeps();
     if (batch.queue.endsWith("-dlq")) {
       // Dead letters: the message exhausted its delivery retries. Postgres is the source of truth and the sweeper heals the work itself,
       // so this only makes the event visible to alerting (Workers Logs) and clears the queue.
-      for (const m of batch.messages) { log.error({ queue: batch.queue, body: m.body, attempts: m.attempts }, "dead-lettered queue message"); m.ack(); }
+      for (const m of batch.messages) log.error({ queue: batch.queue, body: m.body, attempts: m.attempts }, "dead-lettered queue message");
+      metrics?.deadLettered(batch.queue, batch.messages.map((m) => ({ body: m.body, attempts: m.attempts })));   // counted on the owner dashboard
+      await metrics?.flush();
+      for (const m of batch.messages) m.ack();
       return;
     }
     if (batch.queue.startsWith("analytics-")) {
