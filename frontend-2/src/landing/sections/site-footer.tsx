@@ -160,9 +160,17 @@ export function SiteFooter() {
             </Link>
             .
           </p>
-          <p>
-            Posts to {channels.length} networks from one composer, your AI
-            assistant or the API.
+          <p className="flex flex-wrap items-center gap-x-4">
+            <span>
+              Posts to {channels.length} networks from one composer, your AI
+              assistant or the API.
+            </span>
+            <Link href="/privacy" className="inline-flex min-h-9 items-center hover:text-ink">
+              Privacy
+            </Link>
+            <Link href="/terms" className="inline-flex min-h-9 items-center hover:text-ink">
+              Terms
+            </Link>
           </p>
         </div>
       </div>
