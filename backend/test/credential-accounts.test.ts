@@ -8,9 +8,10 @@ import { createTestApp, TEST_KEYS } from "./helpers/app.js";
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status });
 const exp = Math.floor(Date.now() / 1000) + 7200;
 const jwt = `x.${btoa(JSON.stringify({ exp })).replace(/=/g, "")}.y`;
-let sessionOk = true;
+let sessionOk = true, platformDown = false;
 const fakeBsky = (async (url: string | URL | Request) => {
   const u = String(url);
+  if (u.includes("createSession") && platformDown) return json({ error: "Unavailable" }, 503);
   if (u.includes("createSession")) return sessionOk ? json({ accessJwt: jwt, refreshJwt: "REFRESH-SECRET", handle: "ada.bsky.social", did: "did:plc:ada" }) : json({ error: "AuthenticationRequired" }, 401);
   if (u.includes("getProfile")) return json({ displayName: "Ada" });
   return json({}, 404);
@@ -18,6 +19,7 @@ const fakeBsky = (async (url: string | URL | Request) => {
 const fakeFb = (async (url: string | URL | Request) => {
   const u = String(url);
   if (u.includes("oauth/access_token")) return json({ access_token: "USER-TOKEN" });
+  if (u.includes("/me?")) return json({ id: "fb-user-1" });
   if (u.includes("/me/accounts")) return json({ data: [{ id: "p1", name: "Page One", access_token: "PAGE-TOKEN-1" }, { id: "p2", name: "Page Two", access_token: "PAGE-TOKEN-2" }] });
   return json({}, 404);
 }) as typeof fetch;
@@ -58,8 +60,12 @@ describe("credentials-mode and multi-account connect", async () => {
     expect((await post({ platform: "bluesky", fields: { identifier: "x" } })).status).toBe(400);
     expect((await post({ platform: "facebook", fields: {} })).status).toBe(400);
     sessionOk = false;
-    expect((await post({ platform: "bluesky", fields: { identifier: "x", appPassword: "y" } })).status).toBeGreaterThanOrEqual(400);
-    sessionOk = true;
+    const bad = await post({ platform: "bluesky", fields: { identifier: "x", appPassword: "y" } });
+    expect(bad.status).toBe(400);                                  // a typo'd app password is the user's to fix, never a 500
+    expect(bad.body.error.message).toMatch(/rejected/i);
+    sessionOk = true; platformDown = true;
+    expect((await post({ platform: "bluesky", fields: { identifier: "x", appPassword: "y" } })).status).toBe(502);   // platform outage: retry later
+    platformDown = false;
     const outsider = await t.newUser("outsider");
     expect((await outsider.agent.post(`/workspaces/${ws}/accounts/connect-credentials`).send({ platform: "bluesky", fields: { identifier: "a", appPassword: "b" } })).status).toBe(404); // non-members cannot even learn the workspace exists
   });

@@ -30,6 +30,7 @@ const schema = z.object({
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
+  OPS_READ_TOKEN: z.string().min(24).optional(),   // read-only: /admin/ops/* only. This is the one the browser dashboard holds; it cannot change billing
   OPS_TOKEN: z.string().min(24).optional(),   // enables GET /health/queues for external monitoring
   DODO_API_KEY: z.string().min(10).optional(),          // enables billing checkout/cancel (secret: never logged)
   DODO_WEBHOOK_KEY: z.string().min(10).optional(),      // Standard Webhooks signing secret (whsec_...)

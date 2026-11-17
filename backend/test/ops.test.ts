@@ -1,13 +1,25 @@
 import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import type { Db } from "../src/infrastructure/database/db.js";
-import { quantile, routeGroup } from "../src/modules/ops/metrics.js";
+import { quantile, redact, routeGroup } from "../src/modules/ops/metrics.js";
 import { estimateMonthlyCosts } from "../src/modules/ops/costs.js";
 import { purgeOldRows } from "../src/workers/maintenance.js";
 import { createTestApp } from "./helpers/app.js";
 import { world } from "./helpers/world.js";
 
 const OPS = "ops-token-ops-token-ops-token-123";
+
+describe("error message redaction", () => {
+  it.each([
+    ["access_token=abc123", "abc123"],
+    ["client_secret=s3cr3t&x=1", "s3cr3t"],
+    ["refresh_token: tok-9", "tok-9"],
+    ["Authorization: Bearer short1", "short1"],
+    ["password=hunter2", "hunter2"],
+    ["mail ada@example.com failed", "ada@example.com"],
+  ])("hides the secret in %s", (msg, secret) => expect(redact(msg)).not.toContain(secret));
+  it("keeps harmless text", () => expect(redact("responded 400: Invalid parameter")).toBe("responded 400: Invalid parameter"));
+});
 
 describe("route groups", () => {
   it("collapse matched route patterns to a bounded set of groups", () => {
@@ -45,7 +57,12 @@ describe("cost estimate", () => {
 
 describe("ops dashboard backend", async () => {
   let boom = false;
-  const wrapDb = (db: Db): Db => ({ ...db, query: (t, p) => (boom && t.includes("FROM audit_logs") && t.includes("workspace_id = $1") ? Promise.reject(new Error("db exploded for owner@example.com token=abc123def456ghi789")) : db.query(t, p)) });
+  let inflight = 0, peak = 0;   // each Worker query holds its own connection; the runtime allows 6 at once
+  const wrapDb = (db: Db): Db => ({ ...db, query: async (t, p) => {
+    if (boom && t.includes("FROM audit_logs") && t.includes("workspace_id = $1")) throw new Error("db exploded for owner@example.com token=abc123def456ghi789");
+    peak = Math.max(peak, ++inflight);
+    try { return await db.query(t, p); } finally { inflight--; }
+  } });
   const t = await createTestApp([], { env: { OPS_TOKEN: OPS, CORS_ORIGINS: "https://dash.example" }, wrapDb });
   afterAll(t.close);
   const ops = (path: string, token: string | null = OPS) => { const r = request(t.app).get(path); return token ? r.set("authorization", `Bearer ${token}`) : r; };
@@ -86,6 +103,20 @@ describe("ops dashboard backend", async () => {
     expect((await t.db.query("SELECT 1 FROM request_metrics WHERE route_group = '/workspaces/:workspaceId/audit-logs' AND status = 500")).rowCount).toBe(1);
   });
 
+  it("a read-only dashboard token opens /admin/ops but can never touch billing writes", async () => {
+    const READ = "read-only-read-only-read-only-12";
+    const r = await createTestApp([], { env: { OPS_TOKEN: OPS, OPS_READ_TOKEN: READ } });
+    const get = (path: string, tok: string) => request(r.app).get(path).set("authorization", `Bearer ${tok}`);
+    expect((await get("/admin/ops/overview", READ)).status).toBe(200);
+    expect((await get("/admin/ops/overview", OPS)).status).toBe(200);        // the full token still reads (monitors, curl)
+    expect((await get("/admin/billing/webhook-events", READ)).status).toBe(401);
+    expect((await get("/admin/billing/webhook-events", OPS)).status).toBe(200);
+    const only = await createTestApp([], { env: { OPS_READ_TOKEN: READ } });   // read token alone: dashboard works, billing stays off
+    expect((await request(only.app).get("/admin/ops/overview").set("authorization", `Bearer ${READ}`)).status).toBe(200);
+    expect((await request(only.app).get("/admin/billing/webhook-events").set("authorization", `Bearer ${READ}`)).status).toBe(404);
+    await r.close(); await only.close();
+  });
+
   it("every /admin/ops endpoint requires the ops token (constant-time), and is 404 when no token is configured", async () => {
     for (const p of ["/admin/ops/overview", "/admin/ops/metrics", "/admin/ops/audit", "/admin/ops/errors"]) {
       expect((await ops(p, null)).status).toBe(401);
@@ -110,8 +141,10 @@ describe("ops dashboard backend", async () => {
     await t.db.query("INSERT INTO media_assets (workspace_id, kind, storage_key, filename, mime_type, size_bytes, status, created_by) VALUES ($1,'image','k1','a.png','image/png',1000,'ready',$2), ($1,'image','k2','b.png','image/png',500,'deleted',$2)", [ws, owner.id]);
     metrics.deadLettered("publish-jobs-dlq", [{ body: { jobId: "j1" }, attempts: 6 }, { body: { jobId: "j2" }, attempts: 6 }]);
     await metrics.flush();
+    peak = 0;
     const r = await ops("/admin/ops/overview");
     expect(r.status).toBe(200);
+    expect(peak).toBeLessThanOrEqual(5);   // stay under the Worker's 6 simultaneous connections or panels time out queueing
     const d = r.body.data;
     expect(d.status.api).toBe("up");
     expect(d.status.db.ok).toBe(true);

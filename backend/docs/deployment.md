@@ -26,7 +26,8 @@ export DATABASE_URL='postgres://…neon.tech/neondb?sslmode=require'
 npm run migrate                                   # applies src/infrastructure/database/migrations/*.sql in order
 
 # 2. Hyperdrive (connection pooling for Workers)
-npx wrangler hyperdrive create social-db --connection-string="$DATABASE_URL"
+npx wrangler hyperdrive create social-db --connection-string="$DATABASE_URL" --caching-disabled
+#    --caching-disabled is required: Hyperdrive's query cache serves stale reads (sessions, job state) and caused production 500s.
 #    → put the printed id into wrangler.jsonc  hyperdrive[0].id
 
 # 3. Queues
@@ -39,7 +40,7 @@ npx wrangler kv namespace create CACHE                       # add to wrangler.j
 #    R2 CORS (browser uploads with presigned PUT): allow your app origin, methods PUT/GET/HEAD, header Content-Type.
 
 # 5. Secrets (never in wrangler.jsonc)
-for s in BETTER_AUTH_SECRET TOKEN_ENC_KEYS RESEND_API_KEY OPS_TOKEN R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET \
+for s in BETTER_AUTH_SECRET TOKEN_ENC_KEYS RESEND_API_KEY OPS_TOKEN OPS_READ_TOKEN R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET \
          LINKEDIN_CLIENT_ID LINKEDIN_CLIENT_SECRET X_CLIENT_ID X_CLIENT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
          THREADS_APP_ID THREADS_APP_SECRET FACEBOOK_APP_ID FACEBOOK_APP_SECRET PINTEREST_APP_ID PINTEREST_APP_SECRET TIKTOK_CLIENT_KEY TIKTOK_CLIENT_SECRET; do
   npx wrangler secret put "$s"; done
@@ -55,7 +56,7 @@ Then register the OAuth redirect URI `https://<api-host>/oauth/<platform>/callba
 * Turn on **Bot Fight Mode**, enforce HTTPS (HSTS is also sent by the app).
 
 ## Environment variables
-Optional feature switches (all in `.env.example`): `DODO_API_KEY` + `DODO_WEBHOOK_KEY` + `DODO_MODE` (billing; register `https://<api-host>/webhooks/dodo` in Dodo and map each plan price with `PUT /admin/billing/plans/{plan}/prices/{currency}/{interval}/provider-ref`), `BILLING_ENFORCE` (plan limits apply; off by default), `OPS_TOKEN` (enables `/admin/billing/*` and `/health/queues`), `MEDIA_TRANSFORM_ORIGIN` (zone with Cloudflare Media Transformations enabled; turns on video re-encoding), `REQUIRE_EMAIL_VERIFICATION`, `NOTIFY_PRODUCER_LAG_S`. Upload clients must send the headers returned by the upload endpoint (they include `If-None-Match: *`).
+Optional feature switches (all in `.env.example`): `DODO_API_KEY` + `DODO_WEBHOOK_KEY` + `DODO_MODE` (billing; register `https://<api-host>/webhooks/dodo` in Dodo and map each plan price with `PUT /admin/billing/plans/{plan}/prices/{currency}/{interval}/provider-ref`), `BILLING_ENFORCE` (plan limits apply; off by default), `OPS_TOKEN` (enables `/admin/billing/*` writes and `/health/queues`; keep it out of browsers), `OPS_READ_TOKEN` (read-only; the only token the `/admin` dashboard should hold; opens `/admin/ops/*` and nothing else), `MEDIA_TRANSFORM_ORIGIN` (zone with Cloudflare Media Transformations enabled; turns on video re-encoding), `REQUIRE_EMAIL_VERIFICATION`, `NOTIFY_PRODUCER_LAG_S`. Upload clients must send the headers returned by the upload endpoint (they include `If-None-Match: *`).
 See `.env.example` for every variable. Required for a working deployment: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `TOKEN_ENC_KEYS`, `CORS_ORIGINS`, `APP_URL`, plus at least one platform's credentials. Key rotation: prepend a new key (`2:<new>,1:<old>`), deploy, later drop the old one after re-encryption has been verified (re-encryption job is not implemented: old keys must stay until all tokens are refreshed/re-linked).
 
 ## Operations

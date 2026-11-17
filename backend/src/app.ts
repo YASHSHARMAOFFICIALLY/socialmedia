@@ -138,7 +138,8 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
     });
     next();
   });
-  app.use(helmet());
+  // same-origin, not helmet's no-referrer: with no-referrer Chrome posts `Origin: null` from our own consent/approval forms and originGuard rejects them.
+  app.use(helmet({ referrerPolicy: { policy: "same-origin" } }));
   app.use(noStore);
   app.use(cors({ origin: cfg.CORS_ORIGINS, credentials: true }));
   app.use(originGuard(cfg.CORS_ORIGINS, cfg.BETTER_AUTH_URL ? new URL(cfg.BETTER_AUTH_URL).origin : undefined));
@@ -186,9 +187,9 @@ export function createApp({ cfg, log, db, auth, workspaces, accounts, content, p
   app.use("/webhooks", hookLimit({ name: "platform-webhooks", limit: 600, windowS: 60, key: (req) => req.header("cf-connecting-ip") ?? req.ip ?? "unknown" }));
   app.use(billingWebhookRoutes(billingPayments));
   app.use(billingAdminRoutes({ db, pay: billingPayments, opsToken: cfg.OPS_TOKEN }));
-  app.use(opsRoutes({ db, log, opsToken: cfg.OPS_TOKEN }));
+  app.use(opsRoutes({ db, log, opsToken: cfg.OPS_TOKEN, opsReadToken: cfg.OPS_READ_TOKEN }));
   app.use(mcpRoutes({ auth: mcpAuth, deps: { db, log, workspaces, accounts, content, analytics, billing, billingPayments, publishing, confirmSecret: cfg.BETTER_AUTH_SECRET ?? "" }, log, publicUrl: cfg.BETTER_AUTH_URL, appUrl: cfg.APP_URL, allowedOrigins: cfg.CORS_ORIGINS, authed, limit }));
-  app.use(inboundWebhookRoutes({ db, log, instagramAppSecret: cfg.FACEBOOK_APP_SECRET, instagramVerifyToken: cfg.INSTAGRAM_WEBHOOK_VERIFY_TOKEN, publicUrl: cfg.BETTER_AUTH_URL ?? "", disconnect: accounts.disconnectByExternalId }));
+  app.use(inboundWebhookRoutes({ db, log, instagramAppSecret: cfg.FACEBOOK_APP_SECRET, instagramVerifyToken: cfg.INSTAGRAM_WEBHOOK_VERIFY_TOKEN, publicUrl: cfg.BETTER_AUTH_URL ?? "", disconnect: accounts.disconnectByFacebookUser }));
   app.get("/openapi.json", (_req, res) => res.json(buildSpec()));
   app.get("/docs", docsPage);
 

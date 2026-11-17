@@ -31,6 +31,14 @@ export async function longLivedUserToken(f: typeof fetch, platform: string, cfg:
   return long;
 }
 
+/** The Facebook user behind a user token. Meta's deauthorize / data-deletion callbacks identify people by this id, not by Page or Instagram id. */
+export async function facebookUserId(f: typeof fetch, platform: string, userToken: string): Promise<string> {
+  const r = await metaFetch(f, platform, `${GRAPH}/me?fields=id`, { headers: { authorization: `Bearer ${userToken}` } });
+  const id = ((await r.json()) as { id?: string }).id;
+  if (!id) throw new PlatformError("permanent", `${platform} did not return the user id`);
+  return id;
+}
+
 export function createFacebookAdapter(cfg: { clientId: string; clientSecret: string }, f: typeof fetch = fetch): SocialAdapter {
   const auth = (t: string) => ({ authorization: `Bearer ${t}` });
   /** name -> latest value; an object value (reactions by type) is summed. */
@@ -55,10 +63,11 @@ export function createFacebookAdapter(cfg: { clientId: string; clientSecret: str
     },
     async fetchAccount(): Promise<never> { throw new PlatformError("permanent", "facebook connects Pages through listAccounts"); },
     async listAccounts(tokens): Promise<ConnectedAccount[]> {
+      const fbUserId = await facebookUserId(f, "facebook", tokens.accessToken);
       const r = await metaFetch(f, "facebook", `${GRAPH}/me/accounts?${new URLSearchParams({ fields: "id,name,username,access_token,picture{url}", limit: "100" })}`, { headers: auth(tokens.accessToken) });
       const pages = ((await r.json()) as { data?: { id: string; name: string; username?: string; access_token?: string; picture?: { data?: { url?: string } } }[] }).data ?? [];
       return pages.filter((p) => p.access_token).map((p) => ({
-        profile: { externalId: p.id, displayName: p.name, ...(p.username ? { username: p.username } : {}), ...(p.picture?.data?.url ? { avatarUrl: p.picture.data.url } : {}), accountType: "business" as const, metadata: {} },
+        profile: { externalId: p.id, displayName: p.name, ...(p.username ? { username: p.username } : {}), ...(p.picture?.data?.url ? { avatarUrl: p.picture.data.url } : {}), accountType: "business" as const, metadata: { fbUserId } },
         tokens: { accessToken: p.access_token!, scopes: tokens.scopes },
       }));
     },

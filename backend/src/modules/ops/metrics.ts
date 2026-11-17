@@ -41,7 +41,7 @@ export function quantile(buckets: readonly { le: number; count: number }[], q: n
 export function redact(message: string): string {
   return message
     .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "[email]")
-    .replace(/\b(token|key|secret|password|authorization|cookie|code)(\s*[=:]\s*)\S+/gi, "$1$2[redacted]")
+    .replace(/([\w-]*(?:token|key|secret|password|authorization|cookie|code))(\s*[=:]\s*)(?:Bearer\s+)?[^\s&]+/gi, "$1$2[redacted]")   // no \b: it does not fire after "_" (access_token=)
     .replace(/[A-Za-z0-9_-]{24,}/g, (m) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(m) ? m : "[redacted]"))   // long opaque strings; ids (UUIDs) stay
     .slice(0, 500);
 }

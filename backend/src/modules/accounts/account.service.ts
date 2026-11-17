@@ -103,16 +103,16 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
      * Called by verified platform callbacks (user removed the app / asked for data deletion). Not user-authorized: the platform's signed
      * request IS the authority. Deletes credentials, disconnects every matching account, and optionally purges collected analytics.
      */
-    async disconnectByExternalId(platform: string, externalId: string, purgeData: boolean) {
+    async disconnectByFacebookUser(fbUserId: string, purgeData: boolean) {
       return db.tx(async (q) => {
-        const rows = (await q.query<{ id: string; workspace_id: string }>("SELECT id, workspace_id FROM social_accounts WHERE platform = $1 AND external_id = $2 AND status <> 'disconnected'", [platform, externalId])).rows;
-        const all = (await q.query<{ id: string; workspace_id: string }>("SELECT id, workspace_id FROM social_accounts WHERE platform = $1 AND external_id = $2", [platform, externalId])).rows;
+        const rows = (await q.query<{ id: string; workspace_id: string; platform: string }>("SELECT id, workspace_id, platform FROM social_accounts WHERE platform IN ('instagram','facebook') AND metadata->>'fbUserId' = $1 AND status <> 'disconnected'", [fbUserId])).rows;
+        const all = (await q.query<{ id: string; workspace_id: string; platform: string }>("SELECT id, workspace_id, platform FROM social_accounts WHERE platform IN ('instagram','facebook') AND metadata->>'fbUserId' = $1", [fbUserId])).rows;
         for (const a of rows) {
           await repo.deleteCredentials(q, a.workspace_id, a.id);
           await repo.setStatus(q, a.workspace_id, a.id, "disconnected", "Removed on the platform");
-          if (!purgeData) await auditRepository.record(q, { workspaceId: a.workspace_id, actorId: null, action: "account.deauthorized", entityType: "social_account", entityId: a.id, metadata: { platform } });
+          if (!purgeData) await auditRepository.record(q, { workspaceId: a.workspace_id, actorId: null, action: "account.deauthorized", entityType: "social_account", entityId: a.id, metadata: { platform: a.platform } });
         }
-        if (purgeData) for (const a of all) await auditRepository.record(q, { workspaceId: a.workspace_id, actorId: null, action: "account.data_deleted", entityType: "social_account", entityId: a.id, metadata: { platform } });
+        if (purgeData) for (const a of all) await auditRepository.record(q, { workspaceId: a.workspace_id, actorId: null, action: "account.data_deleted", entityType: "social_account", entityId: a.id, metadata: { platform: a.platform } });
         if (purgeData && all.length) {
           await q.query("DELETE FROM analytics_targets WHERE social_account_id = ANY($1::uuid[])", [all.map((a) => a.id)]);   // cascades to snapshots, metrics, aggregates
           await q.query("UPDATE social_accounts SET display_name = 'Deleted account', username = NULL, avatar_url = NULL, metadata = '{}' WHERE id = ANY($1::uuid[])", [all.map((a) => a.id)]);
@@ -195,7 +195,12 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
       if (!adapter.credentials) throw badRequest(`${platform} connects with OAuth, not credentials`);
       await gate(workspaceId, "connected_accounts");
       for (const f of adapter.credentials.fields) if (!fields[f.name]?.trim()) throw badRequest(`Missing field '${f.name}'`);
-      const connected = await adapter.credentials.connect(fields);
+      const connected = await adapter.credentials.connect(fields).catch((e: unknown) => {
+        if (!(e instanceof PlatformError)) throw e;
+        // Never forward the platform's own message. A rejection is the user's to fix; anything else is the platform being down.
+        if (e.kind === "auth_expired" || e.kind === "permanent") throw badRequest(`${platform} rejected those credentials. Check them and try again.`);
+        throw new AppError(502, "BAD_GATEWAY", `${platform} is not reachable right now. Try again shortly.`);
+      });
       return db.tx((tx) => store(tx, workspaceId, a.id, platform, connected));
     },
 

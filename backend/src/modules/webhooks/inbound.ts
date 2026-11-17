@@ -26,7 +26,7 @@ export function parseSignedRequest(signed: string, secret: string, nowS = Math.f
   } catch { return null; }
 }
 
-export interface InboundDeps { db: Db; log: Logger; instagramAppSecret?: string | undefined; instagramVerifyToken?: string | undefined; publicUrl: string; disconnect: (platform: string, externalId: string, purgeData: boolean) => Promise<number> }
+export interface InboundDeps { db: Db; log: Logger; instagramAppSecret?: string | undefined; instagramVerifyToken?: string | undefined; publicUrl: string; disconnect: (fbUserId: string, purgeData: boolean) => Promise<number> }
 
 export function inboundWebhookRoutes(d: InboundDeps) {
   const r = Router();
@@ -55,8 +55,8 @@ export function inboundWebhookRoutes(d: InboundDeps) {
     const data = parseSignedRequest(String(req.body?.signed_request ?? ""), d.instagramAppSecret);
     if (!data?.user_id) { res.status(400).json({ error: { code: "BAD_REQUEST", message: "Invalid signed_request", requestId: req.id } }); return; }
     const code = createHash("sha256").update(`${kind}:${data.user_id}:${Date.now()}:${Math.random()}`).digest("hex").slice(0, 24);
-    const n = await d.disconnect("instagram", String(data.user_id), kind === "data_deletion");
-    await store(kind, code, { userId: "redacted", accountsAffected: n }, "completed");
+    const n = await d.disconnect(String(data.user_id), kind === "data_deletion");
+    await store(kind, code, { userId: "redacted", accountsAffected: n }, n > 0 ? "completed" : "no_matching_accounts");   // never claim a deletion that touched nothing
     if (kind === "data_deletion") res.json({ url: `${d.publicUrl}/webhooks/data-deletion/${code}`, confirmation_code: code });
     else res.json({ success: true });
   }] as const;

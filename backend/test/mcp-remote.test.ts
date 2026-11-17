@@ -92,6 +92,18 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     void owner;
   });
 
+  it("consent/approval pages let browsers send their real Origin: no-referrer would make Chrome post `Origin: null` and the CSRF guard would reject every click", async () => {
+    const { owner } = await world(t, ["x"]);
+    const start = (await request(t.app).post("/mcp/device").send({ client_name: "distora-cli" })).body;
+    const page = await owner.agent.get(`/mcp/device?user_code=${start.user_code}`);
+    expect(page.headers["referrer-policy"]).toBe("same-origin");
+    expect((await request(t.app).get("/health/live")).headers["referrer-policy"]).toBe("same-origin");
+    // what Chrome sends with that policy for a same-origin form post: the page's own origin, which the guard accepts; the literal "null" is never accepted
+    const own = new URL(start.verification_uri).origin;
+    expect((await owner.agent.post("/mcp/device/approve").set("Origin", "null").type("form").send({ user_code: start.user_code, decision: "deny" })).status).toBe(403);
+    expect((await owner.agent.post("/mcp/device/approve").set("Origin", own).type("form").send({ user_code: start.user_code, decision: "deny" })).status).not.toBe(403);
+  });
+
   it("device flow: pending -> approve in a browser session -> tokens; refresh rotates; reuse of an old refresh token revokes the grant", async () => {
     const { owner, ws } = await world(t, ["x"]);
     await upgrade(ws);

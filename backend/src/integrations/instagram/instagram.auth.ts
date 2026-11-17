@@ -2,7 +2,7 @@ import { badRequest } from "../../shared/errors/errors.js";
 import { PlatformError } from "../core/errors.js";
 import { metaFetch } from "../core/http.js";
 import type { ConnectedAccount, SocialAdapter } from "../core/types.js";
-import { GRAPH, V, longLivedUserToken } from "../facebook/facebook.adapter.js";
+import { GRAPH, V, facebookUserId, longLivedUserToken } from "../facebook/facebook.adapter.js";
 
 // "Instagram API with Facebook Login" (Meta stopped offering "Instagram API with Instagram Login" to new apps).
 // Verified (developers.facebook.com Instagram Platform docs, v27.0): the user logs in through the Facebook Login dialog; the code becomes a
@@ -28,13 +28,14 @@ export function createInstagramAuth(cfg: { clientId: string; clientSecret: strin
     },
     async fetchAccount(): Promise<never> { throw new PlatformError("permanent", "instagram connects through listAccounts"); },
     async listAccounts(tokens): Promise<ConnectedAccount[]> {
+      const fbUserId = await facebookUserId(f, "instagram", tokens.accessToken);
       const fields = "id,name,access_token,instagram_business_account{id,username,profile_picture_url}";
       const r = await metaFetch(f, "instagram", `${GRAPH}/me/accounts?${new URLSearchParams({ fields, limit: "100" })}`, { headers: { authorization: `Bearer ${tokens.accessToken}` } });
       const pages = ((await r.json()) as { data?: Page[] }).data ?? [];
       const found = pages.filter((p) => p.access_token && p.instagram_business_account?.id).map((p) => {
         const ig = p.instagram_business_account!;
         return {
-          profile: { externalId: ig.id, displayName: ig.username ?? p.name, ...(ig.username ? { username: ig.username } : {}), ...(ig.profile_picture_url ? { avatarUrl: ig.profile_picture_url } : {}), accountType: "business" as const, metadata: { pageId: p.id } },
+          profile: { externalId: ig.id, displayName: ig.username ?? p.name, ...(ig.username ? { username: ig.username } : {}), ...(ig.profile_picture_url ? { avatarUrl: ig.profile_picture_url } : {}), accountType: "business" as const, metadata: { pageId: p.id, fbUserId } },
           tokens: { accessToken: p.access_token!, scopes: tokens.scopes },
         };
       });

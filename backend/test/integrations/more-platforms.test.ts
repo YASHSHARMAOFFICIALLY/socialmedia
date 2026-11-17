@@ -261,13 +261,13 @@ describe("Facebook Pages", () => {
     expect(m).toEqual([{ originalName: "page_follows", value: 120, availability: "available" }, { originalName: "page_media_view", value: 40, availability: "available", period: "day" }]);
   });
   it("exchanges for a long-lived user token, then lists each Page with its own Page token", async () => {
-    const h = harness((c) => c.url.includes("oauth/access_token") ? Response.json({ access_token: c.url.includes("fb_exchange_token") ? "LONG" : "SHORT" }) : Response.json({ data: [{ id: "p1", name: "Shop", access_token: "PT1", picture: { data: { url: "https://pic" } } }, { id: "p2", name: "No token" }] }));
+    const h = harness((c) => c.url.includes("oauth/access_token") ? Response.json({ access_token: c.url.includes("fb_exchange_token") ? "LONG" : "SHORT" }) : c.url.includes("/me?") ? Response.json({ id: "fb-user-1" }) : Response.json({ data: [{ id: "p1", name: "Shop", access_token: "PT1", picture: { data: { url: "https://pic" } } }, { id: "p2", name: "No token" }] }));
     const a = ad(h.f);
     const t = await a.oauth.exchangeCode({ code: "C", redirectUri: "https://api/cb" });
     expect(t.accessToken).toBe("LONG");
     const pages = await a.listAccounts!(t);
     expect(pages).toHaveLength(1);
-    expect(pages[0]).toMatchObject({ profile: { externalId: "p1", displayName: "Shop" }, tokens: { accessToken: "PT1" } });
+    expect(pages[0]).toMatchObject({ profile: { externalId: "p1", displayName: "Shop", metadata: { fbUserId: "fb-user-1" } }, tokens: { accessToken: "PT1" } });
   });
   it("text -> /feed; one photo -> /photos(url); many photos -> unpublished uploads + attached_media; video -> /videos(file_url)", async () => {
     let n = 0;

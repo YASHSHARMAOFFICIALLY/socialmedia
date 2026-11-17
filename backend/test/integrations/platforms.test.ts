@@ -216,7 +216,7 @@ describe("Instagram adapter (mocked API)", () => {
   });
   it("exchanges the code for a long-lived Facebook user token, then connects each Page-linked Instagram account with the Page token", async () => {
     const h = harness((c) => c.url.includes("oauth/access_token") ? Response.json({ access_token: c.url.includes("fb_exchange_token") ? "LONG" : "SHORT" })
-      : Response.json({ data: [
+      : c.url.includes("/me?") ? Response.json({ id: "fb-user-1" }) : Response.json({ data: [
         { id: "p1", name: "Shop", access_token: "PT1", instagram_business_account: { id: "1784", username: "shop.ig", profile_picture_url: "https://pic" } },
         { id: "p2", name: "No IG", access_token: "PT2" }] }));
     const a = ad(h.f);
@@ -225,15 +225,15 @@ describe("Instagram adapter (mocked API)", () => {
     expect(h.calls[1]!.url).toContain("grant_type=fb_exchange_token");
     expect(t.accessToken).toBe("LONG");
     const found = await a.listAccounts!(t);
-    const me = new URL(h.calls[2]!.url);
+    const me = new URL(h.calls.find((c) => c.url.includes("/me/accounts"))!.url);
     expect(me.origin + me.pathname).toBe("https://graph.facebook.com/v27.0/me/accounts");
     expect(me.searchParams.get("fields")).toContain("instagram_business_account{id,username,profile_picture_url}");
-    expect(h.calls[2]!.headers.authorization).toBe("Bearer LONG");
+    expect(h.calls.find((c) => c.url.includes("/me/accounts"))!.headers.authorization).toBe("Bearer LONG");
     expect(found).toHaveLength(1);
-    expect(found[0]).toMatchObject({ profile: { externalId: "1784", username: "shop.ig", avatarUrl: "https://pic", metadata: { pageId: "p1" } }, tokens: { accessToken: "PT1" } });
+    expect(found[0]).toMatchObject({ profile: { externalId: "1784", username: "shop.ig", avatarUrl: "https://pic", metadata: { pageId: "p1", fbUserId: "fb-user-1" } }, tokens: { accessToken: "PT1" } });
   });
   it("fails the connect with a clear message when no granted Page has a linked Instagram account", async () => {
-    const h = harness(() => Response.json({ data: [{ id: "p2", name: "No IG", access_token: "PT2" }] }));
+    const h = harness((c) => c.url.includes("/me?") ? Response.json({ id: "fb-user-1" }) : Response.json({ data: [{ id: "p2", name: "No IG", access_token: "PT2" }] }));
     await expect(ad(h.f).listAccounts!({ accessToken: "LONG", scopes: [] })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/Instagram professional account/) });
   });
   it("publishes an image: container -> status FINISHED -> media_publish -> permalink", async () => {
@@ -267,6 +267,11 @@ describe("Instagram adapter (mocked API)", () => {
     expect(await run((c) => c.url.includes("status_code") ? Response.json({ status_code: "FINISHED" }) : c.url.endsWith("media_publish") ? new Response("x", { status: 502 }) : Response.json({ id: "C" }))).toMatchObject({ kind: "unknown" });
     expect(await run((c) => c.url.endsWith("/media") ? new Response("x", { status: 500 }) : Response.json({}))).toMatchObject({ kind: "retryable" });
     expect(await run(() => new Response("x", { status: 429 }))).toMatchObject({ kind: "rate_limited" });
+  });
+  it("Graph error 190 is auth_expired (account shows needs_reauth); Graph rate-limit codes are rate_limited", async () => {
+    const run = (code: number) => ad(harness(() => Response.json({ error: { code, message: "x" } }, { status: 400 })).f).publish!(input(content(), [mk("image", 10)])).catch((e) => e);
+    expect(await run(190)).toMatchObject({ kind: "auth_expired" });
+    expect(await run(4)).toMatchObject({ kind: "rate_limited" });
   });
   it("reconciles by recent media caption", async () => {
     const h = harness(() => Response.json({ data: [{ id: "M7", caption: "Hello", timestamp: new Date().toISOString(), permalink: "https://instagram.com/p/z" }] }));

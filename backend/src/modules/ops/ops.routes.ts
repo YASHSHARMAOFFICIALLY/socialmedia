@@ -25,13 +25,21 @@ function summarize(rows: readonly { le_ms: number; n: number; e5: number; e4?: n
 }
 
 /**
- * Owner-only Health & Activity dashboard data. Read-only, OPS_TOKEN-guarded, never in the public OpenAPI.
+ * Owner-only Health & Activity dashboard data. Read-only, guarded by OPS_READ_TOKEN (or OPS_TOKEN), never in the public OpenAPI.
  * Every number comes from a table we own or from Postgres' catalog; anything we do not record is reported as null / "not tracked".
  */
-export function opsRoutes(d: { db: Db; log: Logger; opsToken?: string | undefined }) {
+export function opsRoutes(d: { db: Db; log: Logger; opsToken?: string | undefined; opsReadToken?: string | undefined }) {
   const r = Router();
-  r.use("/admin/ops", opsAuth(d.opsToken));
-  const q = <R>(sql: string, p?: unknown[]) => d.db.query<R>(sql, p).then((x) => x.rows);
+  r.use("/admin/ops", opsAuth(d.opsReadToken, d.opsToken));
+  // Every query holds its own connection and a Worker may have 6 open at once; the overview fans out ~9, so extras queue and hit the timeout.
+  let busy = 0;
+  const waiting: (() => void)[] = [];
+  const gate = async <T>(fn: () => Promise<T>): Promise<T> => {
+    while (busy >= 4) await new Promise<void>((go) => waiting.push(go));
+    busy++;
+    try { return await fn(); } finally { busy--; waiting.shift()?.(); }
+  };
+  const q = <R>(sql: string, p?: unknown[]) => gate(() => d.db.query<R>(sql, p).then((x) => x.rows));
 
   r.get("/admin/ops/overview", async (_req, res) => {
     const t0 = Date.now();
@@ -62,7 +70,7 @@ export function opsRoutes(d: { db: Db; log: Logger; opsToken?: string | undefine
         (SELECT COALESCE(sum(count), 0)::int FROM request_metrics WHERE minute >= now() - interval '1 hour') AS requests_1h,
         (SELECT COALESCE(sum(count) FILTER (WHERE status >= 500), 0)::int FROM request_metrics WHERE minute >= now() - interval '1 hour') AS errors_1h,
         (SELECT min(minute) FROM request_metrics) AS metrics_since`).then((x) => x[0]!),
-      workerStatus(d.db),
+      gate(() => workerStatus(d.db)),
       // Row counts are the statistics collector's live-tuple estimate (exact counts would scan every table).
       q<{ name: string; total_bytes: number; rows: number }>(`SELECT s.relname AS name, pg_total_relation_size(s.relid)::float8 AS total_bytes, s.n_live_tup::float8 AS rows
          FROM pg_stat_user_tables s WHERE s.schemaname = 'public' ORDER BY 2 DESC LIMIT 12`),

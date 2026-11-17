@@ -1,4 +1,5 @@
-import { PlatformError, platformFetch } from "../core/errors.js";
+import { PlatformError } from "../core/errors.js";
+import { metaFetch } from "../core/http.js";
 import { withHashtags } from "../core/rules.js";
 import type { PublishInput, PublishResult, SocialAdapter } from "../core/types.js";
 import { GRAPH } from "./instagram.auth.js";
@@ -18,7 +19,7 @@ export function createInstagramPublisher(f: typeof fetch = fetch, o: { pollMs?: 
     if (media.length === 0) throw new PlatformError("permanent", "Instagram posts require media");
     const caption = withHashtags(i.content);
     const post = async (path: string, body: object, creates = false) => {
-      const res = await platformFetch(f, "instagram", `${GRAPH}/${path}`, { method: "POST", headers: bearer(i.accessToken), body: JSON.stringify(body), signal: i.signal }, { creates });
+      const res = await metaFetch(f, "instagram", `${GRAPH}/${path}`, { method: "POST", headers: bearer(i.accessToken), body: JSON.stringify(body), signal: i.signal }, { creates });
       return (await res.json()) as { id?: string };
     };
     const container = async (m: (typeof media)[number], extra: object) => {
@@ -32,7 +33,7 @@ export function createInstagramPublisher(f: typeof fetch = fetch, o: { pollMs?: 
     };
     const waitFinished = async (id: string) => {
       for (let n = 0; n < (o.maxPolls ?? 30); n++) {
-        const res = await platformFetch(f, "instagram", `${GRAPH}/${id}?fields=status_code`, { headers: bearer(i.accessToken), signal: i.signal });
+        const res = await metaFetch(f, "instagram", `${GRAPH}/${id}?fields=status_code`, { headers: bearer(i.accessToken), signal: i.signal });
         const s = ((await res.json()) as { status_code?: string }).status_code;
         if (s === "FINISHED") return;
         if (s === "ERROR" || s === "EXPIRED") throw new PlatformError("permanent", `instagram container ${s}`);
@@ -68,7 +69,7 @@ export function createInstagramPublisher(f: typeof fetch = fetch, o: { pollMs?: 
 /** Lists the account's most recent media (IG User media edge) and matches on caption + time. */
 export function createInstagramReconciler(f: typeof fetch = fetch): NonNullable<SocialAdapter["reconcile"]> {
   return async ({ accessToken, account, content, since }) => {
-    const res = await platformFetch(f, "instagram", `${GRAPH}/${account.externalId}/media?fields=id,caption,timestamp,permalink&limit=10`, { headers: bearer(accessToken) });
+    const res = await metaFetch(f, "instagram", `${GRAPH}/${account.externalId}/media?fields=id,caption,timestamp,permalink&limit=10`, { headers: bearer(accessToken) });
     const items = ((await res.json()) as { data?: { id: string; caption?: string; timestamp?: string; permalink?: string }[] }).data ?? [];
     const want = withHashtags(content).trim();
     const hit = items.find((m) => (m.caption ?? "").trim() === want && (!m.timestamp || new Date(m.timestamp) >= since));

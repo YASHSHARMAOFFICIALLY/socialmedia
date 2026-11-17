@@ -159,25 +159,32 @@ describe("inbound platform webhooks (Instagram)", async () => {
   it("deauthorize and data-deletion callbacks disconnect the account; deletion also purges tokens and analytics", async () => {
     const w = await world(t, []);
     const acct = await seedAccount(t, w.ws, w.owner, "instagram");
-    await t.db.query("UPDATE social_accounts SET external_id = 'ig-user-777' WHERE id = $1", [acct]);
+    // Meta's callbacks carry the FACEBOOK user id; the account is stored under its own Instagram id, so the link lives in metadata.
+    await t.db.query("UPDATE social_accounts SET external_id = 'ig-1784', metadata = $2 WHERE id = $1", [acct, JSON.stringify({ fbUserId: "fb-777" })]);
+    const page = await seedAccount(t, w.ws, w.owner, "facebook");   // the same person's Facebook Page connection goes too
+    await t.db.query("UPDATE social_accounts SET metadata = $2 WHERE id = $1", [page, JSON.stringify({ fbUserId: "fb-777" })]);
+    const stranger = await seedAccount(t, w.ws, w.owner, "instagram");
+    await t.db.query("UPDATE social_accounts SET metadata = $2 WHERE id = $1", [stranger, JSON.stringify({ fbUserId: "fb-other" })]);
     const tgt = (await t.db.query<{ id: string }>("INSERT INTO analytics_targets (workspace_id, social_account_id, platform, scope) VALUES ($1,$2,'instagram','account') RETURNING id", [w.ws, acct])).rows[0]!.id;
     const snap = (await t.db.query<{ id: string }>("INSERT INTO analytics_snapshots (workspace_id, target_id, social_account_id, platform, scope, source, raw) VALUES ($1,$2,$3,'instagram','account','t','{}') RETURNING id", [w.ws, tgt, acct])).rows[0]!.id;
     await t.db.query("INSERT INTO analytics_metrics (snapshot_id, workspace_id, social_account_id, platform, scope, metric_key, original_name, value, availability) VALUES ($1,$2,$3,'instagram','account','followers','followers_count',5,'available')", [snap, w.ws, acct]);
     expect((await request(t.app).post("/webhooks/instagram/deauthorize").type("form").send({ signed_request: "bad.sig" })).status).toBe(400);
-    expect((await request(t.app).post("/webhooks/instagram/data-deletion").type("form").send({ signed_request: signed({ user_id: "ig-user-777" }).replace(/.$/, "A") })).status).toBe(400);
+    expect((await request(t.app).post("/webhooks/instagram/data-deletion").type("form").send({ signed_request: signed({ user_id: "fb-777" }).replace(/.$/, "A") })).status).toBe(400);
     expect(parseSignedRequest(signed({ user_id: "u" }), SECRET)).toEqual({ user_id: "u" });
     const now = Math.floor(Date.now() / 1000);
     expect(parseSignedRequest(signed({ user_id: "u", issued_at: now - 60 }), SECRET)).not.toBeNull();
     expect(parseSignedRequest(signed({ user_id: "u", issued_at: now - 3 * 86_400 }), SECRET)).toBeNull();   // captured long ago: not replayable
     expect(parseSignedRequest(signed({ user_id: "u" }), "other-secret")).toBeNull();
 
-    const de = await request(t.app).post("/webhooks/instagram/deauthorize").type("form").send({ signed_request: signed({ user_id: "ig-user-777" }) });
+    const de = await request(t.app).post("/webhooks/instagram/deauthorize").type("form").send({ signed_request: signed({ user_id: "fb-777" }) });
     expect(de.status).toBe(200);
     expect((await t.db.query("SELECT status FROM social_accounts WHERE id = $1", [acct])).rows[0]).toEqual({ status: "disconnected" });
     expect((await t.db.query("SELECT 1 FROM oauth_credentials WHERE social_account_id = $1", [acct])).rowCount).toBe(0);
+    expect((await t.db.query("SELECT status FROM social_accounts WHERE id = $1", [page])).rows[0]).toEqual({ status: "disconnected" });
+    expect((await t.db.query("SELECT status FROM social_accounts WHERE id = $1", [stranger])).rows[0]).toEqual({ status: "active" });   // someone else's account is untouched
     expect((await t.db.query("SELECT 1 FROM analytics_metrics WHERE social_account_id = $1", [acct])).rowCount).toBe(1);   // deauthorize keeps history
 
-    const del = await request(t.app).post("/webhooks/instagram/data-deletion").type("form").send({ signed_request: signed({ user_id: "ig-user-777" }) });
+    const del = await request(t.app).post("/webhooks/instagram/data-deletion").type("form").send({ signed_request: signed({ user_id: "fb-777" }) });
     expect(del.status).toBe(200);
     expect(del.body.confirmation_code).toMatch(/^[0-9a-f]{24}$/);
     expect(del.body.url).toContain(`/webhooks/data-deletion/${del.body.confirmation_code}`);
@@ -187,6 +194,12 @@ describe("inbound platform webhooks (Instagram)", async () => {
     expect(status.body.data).toMatchObject({ status: "completed" });
     expect((await request(t.app).get("/webhooks/data-deletion/doesnotexist")).status).toBe(404);
     expect((await t.db.query("SELECT 1 FROM audit_logs WHERE entity_id = $1 AND action = 'account.data_deleted'", [acct])).rowCount).toBe(1);
+  });
+
+  it("a deletion request that matches no account is not reported as completed", async () => {
+    const del = await request(t.app).post("/webhooks/instagram/data-deletion").type("form").send({ signed_request: signed({ user_id: "fb-never-connected" }) });
+    expect(del.status).toBe(200);
+    expect((await request(t.app).get(`/webhooks/data-deletion/${del.body.confirmation_code}`)).body.data.status).toBe("no_matching_accounts");
   });
 
   it("is inert when the platform is not configured", async () => {

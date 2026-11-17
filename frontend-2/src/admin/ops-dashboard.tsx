@@ -46,11 +46,11 @@ function TokenGate() {
     <Shell>
       <form onSubmit={submit} className="mx-auto max-w-md py-24">
         <h1 className="font-heading text-heading text-ink">Health & <em>activity</em></h1>
-        <p className="mt-4 text-muted">Paste the backend&apos;s OPS_TOKEN. It stays in this tab only and is sent as a bearer header to the API.</p>
+        <p className="mt-4 text-muted">Paste the backend&apos;s read-only OPS_READ_TOKEN (never OPS_TOKEN). It stays in this tab only and is sent as a bearer header to the API.</p>
         <label htmlFor="ops-token" className="mt-8 block text-sm font-medium text-ink">Ops token</label>
         <input id="ops-token" type="password" autoComplete="off" spellCheck={false} required value={value} onChange={(e) => setValue(e.target.value)} aria-describedby={rejected ? "ops-token-error" : undefined} aria-invalid={rejected || undefined}
           className={cn("mt-2 block w-full rounded-lg border border-input bg-white px-3.5 py-3 font-mono text-base text-ink", focus)} />
-        {rejected && <p id="ops-token-error" role="alert" className="mt-2 text-sm text-[#b42318]">That token was rejected (or ops endpoints are switched off on the API). Check OPS_TOKEN and try again.</p>}
+        {rejected && <p id="ops-token-error" role="alert" className="mt-2 text-sm text-[#b42318]">That token was rejected (or ops endpoints are switched off on the API). Check OPS_READ_TOKEN and try again.</p>}
         <button type="submit" className={cn("mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-ink px-4 text-sm font-medium text-white hover:bg-ink/85", focus)}>Open console</button>
       </form>
     </Shell>
