@@ -15,6 +15,7 @@ export const metadata: Metadata = {
   title: "PostRally: write once, post to eleven social networks",
   description:
     "Tailor one post for Instagram, X, LinkedIn, YouTube, Threads, Facebook, Pinterest, TikTok, Bluesky, Mastodon and Telegram. Schedule it in any timezone, track how it did, and run it all from Claude, ChatGPT, Cursor or the API.",
+  other: { "ai-summary": "PostRally is a social media scheduler: write one post, tailor it for 11 networks, schedule it in any timezone, track results, and run it from Claude, ChatGPT or Cursor. Markdown of every page: /llms-full.txt" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { mdAlt } from "@/lib/ai-pages";
 import Link from "next/link";
 import { productName as name } from "@/landing/content";
 import { LegalPage } from "@/landing/legal-page";
@@ -6,7 +7,7 @@ import { LegalPage } from "@/landing/legal-page";
 export const metadata: Metadata = {
   title: `Terms of Service | ${name}`,
   description: `The rules for using ${name}, the social media scheduler.`,
-  alternates: { canonical: "/terms" },
+  alternates: { canonical: "/terms", types: mdAlt("/terms") },
 };
 
 export default function Page() {

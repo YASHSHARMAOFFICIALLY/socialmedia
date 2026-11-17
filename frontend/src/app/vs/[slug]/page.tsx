@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { mdAlt } from "@/lib/ai-pages";
 import { notFound } from "next/navigation";
 import { comparisons } from "@/landing/seo-pages";
 import { ComparePageView } from "@/landing/compare-page";
@@ -12,7 +13,7 @@ export async function generateMetadata({ params }: PageProps<"/vs/[slug]">): Pro
   const { slug } = await params;
   const page = comparisons.find((p) => p.slug === slug);
   if (!page) return {};
-  return { title: `${page.title}: pricing model, networks and AI assistants`, description: page.description, alternates: { canonical: `/vs/${page.slug}` } };
+  return { title: `${page.title}: pricing model, networks and AI assistants`, description: page.description, alternates: { canonical: `/vs/${page.slug}`, types: mdAlt(`/vs/${page.slug}`) } };
 }
 
 export default async function Page({ params }: PageProps<"/vs/[slug]">) {

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { mdAlt } from "@/lib/ai-pages";
 import { productName as name } from "@/landing/content";
 import { LegalPage } from "@/landing/legal-page";
 
 export const metadata: Metadata = {
   title: `Privacy Policy | ${name}`,
   description: `What ${name} collects, why, who processes it and how to delete it.`,
-  alternates: { canonical: "/privacy" },
+  alternates: { canonical: "/privacy", types: mdAlt("/privacy") },
 };
 
 export default function Page() {

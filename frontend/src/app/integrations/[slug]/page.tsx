@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { mdAlt } from "@/lib/ai-pages";
 import { notFound } from "next/navigation";
 import { integrations } from "@/landing/seo-pages";
 import { SeoPageView } from "@/landing/seo-page";
@@ -12,7 +13,7 @@ export async function generateMetadata({ params }: PageProps<"/integrations/[slu
   const { slug } = await params;
   const page = integrations.find((p) => p.slug === slug);
   if (!page) return {};
-  return { title: `${page.title} | PostRally`, description: page.description, alternates: { canonical: `/integrations/${page.slug}` } };
+  return { title: `${page.title} | PostRally`, description: page.description, alternates: { canonical: `/integrations/${page.slug}`, types: mdAlt(`/integrations/${page.slug}`) } };
 }
 
 export default async function Page({ params }: PageProps<"/integrations/[slug]">) {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { mdAlt } from "@/lib/ai-pages";
 import { notFound } from "next/navigation";
 import { channels } from "@/landing/seo-pages";
 import { SeoPageView } from "@/landing/seo-page";
@@ -12,7 +13,7 @@ export async function generateMetadata({ params }: PageProps<"/channels/[slug]">
   const { slug } = await params;
   const page = channels.find((p) => p.slug === slug);
   if (!page) return {};
-  return { title: `${page.title} | PostRally`, description: page.description, alternates: { canonical: `/channels/${page.slug}` } };
+  return { title: `${page.title} | PostRally`, description: page.description, alternates: { canonical: `/channels/${page.slug}`, types: mdAlt(`/channels/${page.slug}`) } };
 }
 
 export default async function Page({ params }: PageProps<"/channels/[slug]">) {

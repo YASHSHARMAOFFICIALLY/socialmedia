@@ -1,28 +1,20 @@
-import { channels, comparisons, integrations } from "@/landing/seo-pages";
-import { faq, footer, productName } from "@/landing/content";
+import { aiPages } from "@/lib/ai-pages";
+import { footer, productName } from "@/landing/content";
 import { siteUrl } from "@/lib/site";
 
-// /llms.txt: a plain-text map of the site for AI assistants (llmstxt.org format). No request data is
-// read, so it is prerendered at build time.
+// /llms.txt (llmstxt.org): a map of the site for AI assistants, built from lib/ai-pages.ts. Links point at
+// the markdown twins. Prerendered at build time.
+const sections = ["Product", "Use it from", "Networks", "Compare", "Legal"];
 
 export function GET() {
-  const link = (path: string, title: string, note: string) => `- [${title}](${siteUrl}${path}): ${note}`;
   const body = [
-    `# ${productName}`,
-    "",
-    `> ${footer.description}`,
-    "",
-    "## Use it from",
-    ...integrations.map((p) => link(`/integrations/${p.slug}`, p.title, p.description)),
-    "",
-    "## Networks",
-    ...channels.map((p) => link(`/channels/${p.slug}`, p.title, p.description)),
-    "",
-    "## Compare",
-    ...comparisons.map((p) => link(`/vs/${p.slug}`, p.title, p.description)),
-    "",
-    "## FAQ",
-    ...faq.items.flatMap((i) => [`### ${i.q}`, i.a, ""]),
+    `# ${productName}`, "", `> ${footer.description}`, "",
+    `Every page is also available as markdown (add .md to the URL) and all of them are in ${siteUrl}/llms-full.txt.`, "",
+    ...sections.flatMap((s) => [
+      `## ${s}`,
+      ...aiPages.filter((p) => p.section === s).map((p) => `- [${p.title}](${siteUrl}${p.path === "/" ? "/index" : p.path}.md): ${p.description}`),
+      "",
+    ]),
   ].join("\n");
-  return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
 }
