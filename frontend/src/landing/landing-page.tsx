@@ -6,9 +6,11 @@ import { Product } from "./sections/product";
 import { Assistants } from "./sections/assistants";
 import { More } from "./sections/more";
 import { Faq } from "./sections/faq";
+import { Closing } from "./sections/closing";
 import { SiteFooter } from "./sections/site-footer";
 
-// Hills photo hero, then a light page (design.md). Ribbon order: hero, "What is it?" demo, details, FAQ.
+// Hills photo hero, then a light page (design.md). The assistant is the differentiator, so it comes straight after
+// the one-line "What is it?": hero, what it is, try it, product screens, the rest, FAQ, a closing ask.
 export function LandingPage() {
   return (
     <div className="landing relative flex-1 bg-paper font-sans text-ink scheme-light">
@@ -16,10 +18,11 @@ export function LandingPage() {
       <main>
         <Hero />
         <Demo />
-        <Product />
         <Assistants />
+        <Product />
         <More />
         <Faq />
+        <Closing />
       </main>
       <SiteFooter />
     </div>

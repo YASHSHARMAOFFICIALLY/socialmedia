@@ -1,4 +1,4 @@
-// All landing copy and the example data shown inside the product screens.
+// All landing copy. The example data shown inside the product screens lives with each demo (stageshow/).
 // Claims must be backed by backend/docs/PROGRESS.md. Screen data is example content with placeholder
 // account names, never invented customers or statistics.
 
@@ -7,6 +7,8 @@ export const productName = "PostRally";
 export const nav = [
   { label: "Product", href: "/#what" },
   { label: "Try it", href: "/#assistants" },
+  { label: "Integrations", href: "/#integrations" },
+  { label: "Compare", href: "/#compare" },
   { label: "FAQ", href: "/#faq" },
 ] as const;
 
@@ -41,17 +43,6 @@ export const product = {
       "Repeat a post daily, weekly or monthly.",
       "A post more than six hours late waits for you instead of going out quietly.",
     ],
-    zone: "Europe/Berlin",
-    days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    hours: ["10:00", "13:00", "16:00", "18:00"],
-    posts: [
-      { day: 0, hour: 0, network: "LinkedIn", label: "Hiring post", state: "scheduled" },
-      { day: 2, hour: 3, network: "Instagram", label: "Weekly tips", state: "repeats" },
-      { day: 3, hour: 1, network: "X", label: "Product thread", state: "review" },
-      { day: 4, hour: 0, network: "LinkedIn", label: "Launch post", state: "scheduled" },
-      { day: 4, hour: 0, network: "X", label: "Launch thread", state: "scheduled" },
-      { day: 4, hour: 0, network: "Instagram", label: "Launch carousel", state: "scheduled" },
-    ],
   },
   analytics: {
     eyebrow: "Measure",
@@ -63,19 +54,6 @@ export const product = {
       "Best network, format and posting time, each shown with the posts behind it.",
       "Insights wait until there are at least five posts per network.",
     ],
-    columns: [
-      { key: "likes", label: "Likes", summed: true },
-      { key: "comments", label: "Comments", summed: true },
-      { key: "views", label: "Views", summed: false },
-    ],
-    // Relative bar lengths only (0-1). The screen shows shape, not figures.
-    rows: [
-      { network: "Instagram", likes: 0.9, comments: 0.5, views: 0.8 },
-      { network: "LinkedIn", likes: 0.55, comments: 0.8, views: 0.4 },
-      { network: "X", likes: 0.4, comments: 0.35, views: 0.95 },
-    ],
-    totalLabel: "All networks",
-    notSummed: "Not added up",
   },
 } as const;
 
@@ -88,11 +66,12 @@ export const assistants = {
   // widget in the middle, actions at the bottom). Every behaviour shown is a real PostRally behaviour.
   chat: {
     lead: "Ask in plain words.",
-    rest: "Claude, ChatGPT or Cursor drafts and schedules. Nothing goes out until you confirm.",
+    rest: "Claude, ChatGPT, Cursor or Claude Code drafts and schedules. Nothing goes out until you confirm.",
     apps: [
       { name: "Claude", how: "Add PostRally as a connector, sign in in the browser." },
       { name: "ChatGPT", how: "Add PostRally as a connector, sign in in the browser." },
       { name: "Cursor", how: "Run postrally mcp login once. The token goes in your keychain." },
+      { name: "Claude Code", how: "Run postrally mcp login once. The token goes in your keychain." },
     ],
     prompts: [
       { ask: "Which posts did best last month?", tool: "get_top_posts", reply: "Your launch carousel on Instagram, then the hiring post on LinkedIn. Both went out on a Wednesday evening." },
@@ -187,6 +166,12 @@ export const faq = {
     { q: "Can my team review posts before they go out?", a: "Yes. Turn on approvals for a workspace and choose how many reviewers a post needs. Nobody can approve their own post, and editing an approved post sends it back for review." },
     { q: "How much does it cost?", a: "Plans are per workspace. Prices are not final yet, and we'll publish them before anyone is charged." },
   ],
+} as const;
+
+export const closing = {
+  title: "Write it once.",
+  body: "Eleven networks, one composer, and your AI assistant when you want it. Prices are coming soon; until then you can try every part.",
+  cta: "Create your account",
 } as const;
 
 export const footer = {

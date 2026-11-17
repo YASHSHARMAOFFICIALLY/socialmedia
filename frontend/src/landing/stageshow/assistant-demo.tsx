@@ -1,7 +1,7 @@
 "use client";
 
 import { Bar, Button, Code, Collapse, Field, Stage, States, Stream, Text, Window, type Act } from "./kit";
-import { networkLogos } from "../components/network-logos";
+import { Mark } from "./mark";
 import { apiLines, demos, type Demo } from "./assistant-demos";
 import "./assistant-demo.css";
 
@@ -46,16 +46,6 @@ async function apiScript(a: Act<S>) {
   await a.wait(700);
   for (let i = 1; i <= apiLines.length; i++) { a.put({ lines: i }); await a.wait(i === apiLines.length ? 700 : 260); }
   await a.wait(2600);
-}
-
-function Mark({ name }: { name: string }) {
-  const l = networkLogos[name];
-  if (!l) return null;
-  return (
-    <svg className="ad-mark" viewBox="0 0 24 24" aria-hidden>
-      <path d={l.path} fill={name === "Instagram" ? "#d6249f" : l.color} />
-    </svg>
-  );
 }
 
 export function AssistantDemo({ slug, demo }: { slug?: string; demo?: Demo }) {

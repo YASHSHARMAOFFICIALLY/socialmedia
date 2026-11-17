@@ -17,13 +17,15 @@ function Column({
   title,
   children,
   list,
+  id,
 }: {
   title: string;
   children: React.ReactNode;
   list?: string;
+  id?: string;
 }) {
   return (
-    <nav aria-label={title}>
+    <nav id={id} aria-label={title} className="scroll-mt-28">
       <h2 className="text-sm font-semibold text-ink">{title}</h2>
       <ul className={`mt-4 ${list ?? ""}`}>{children}</ul>
     </nav>
@@ -100,7 +102,7 @@ export function SiteFooter() {
             </li>
           </Column>
 
-          <Column title="Use it from">
+          <Column title="Use it from" id="integrations">
             {integrations.map((p) => (
               <li key={p.slug}>
                 {/* Opens the product's own site; the REST API has none, so it opens our page. */}
@@ -131,7 +133,7 @@ export function SiteFooter() {
             ))}
           </Column>
 
-          <Column title="Compare">
+          <Column title="Compare" id="compare">
             {comparisons.map((p) => (
               <li key={p.slug}>
                 <Link href={`/vs/${p.slug}`} className={linkClass}>
@@ -185,9 +187,7 @@ export function SiteFooter() {
       </div>
       {/* The name, large and quiet, as the page's last line. Decorative: the logo link above names it. */}
       <div aria-hidden className={`${gutter} overflow-hidden`}>
-        <p className="translate-y-[18%] text-center font-heading text-[clamp(5rem,22vw,19rem)] leading-[0.8] tracking-tight text-ink/[0.07] select-none">
-          {productName}
-        </p>
+        <p data-text={productName} className="translate-y-[18%] text-center font-heading text-[clamp(5rem,22vw,19rem)] leading-[0.8] tracking-tight text-ink/[0.07] select-none before:content-[attr(data-text)]" />
       </div>
     </footer>
   );

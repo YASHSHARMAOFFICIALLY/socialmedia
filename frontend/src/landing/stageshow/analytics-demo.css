@@ -1,0 +1,28 @@
+/* The page is the ground: no plate. The window sits one gutter in and runs off the foot. */
+.ad2 {
+  & .ss-stage { --gutter: 24px; overflow: hidden; background: transparent; font-family: inherit; --ss-accent: #111113; mask-image: linear-gradient(#000 94%, transparent); }
+  & .ss-stage[data-layout="compact"] { --gutter: 12px; }
+
+  .ad2-win { position: absolute; top: var(--gutter); left: var(--gutter); right: var(--gutter); height: 380px; }
+
+  .ad2-table { padding: 4px 8px 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .ad2-row { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); align-items: center; gap: 8px; padding: 0 12px; height: 48px; border-bottom: 1px solid var(--ss-line); color: var(--ss-text-strong); }
+  .ad2-row > span:not(:first-child) { text-align: right; }
+  .ad2-row--head { height: 40px; font-size: 12px; color: #6b6b70; }
+  .ad2-row--total { border-bottom: 0; font-weight: 600; }
+  .ad2-net { display: flex; align-items: center; gap: 8px; }
+  .ad2-mark { width: 16px; height: 16px; flex: none; }
+
+  /* The pill sits in the Views column from the start, hidden, so nothing shifts when it lands. */
+  .ad2-pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 12px; font-weight: 500; opacity: 0; scale: 0.9; transition: opacity 0.3s ease, scale 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+  .ad2-pill[data-on] { opacity: 1; scale: 1; }
+
+  .ad2-foot { margin: 10px 20px 0; font-size: 12px; color: #6b6b70; }
+  /* The pill sits at the window's right edge: shift the centred tooltip left so the stage doesn't clip it. */
+  .ad2-tip { z-index: 5; margin-left: -72px; }
+  .ss-stage[data-layout="compact"] .ad2-tip { margin-left: -118px; }
+
+  .ss-stage[data-layout="compact"] .ad2-table { font-size: 13px; padding: 4px 0 0; }
+  .ss-stage[data-layout="compact"] .ad2-row { padding: 0 10px; gap: 6px; }
+  .ss-stage[data-layout="compact"] .ad2-pill { padding: 3px 7px; font-size: 11px; white-space: nowrap; }
+}

@@ -1,16 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { assistants } from "../content";
 import { Heading, Section, headingGap } from "../components/layout";
 import { assistantLogos } from "../components/assistant-logos";
 import { networkLogos } from "../components/network-logos";
-
-// Pixel-art stickers are heavy (every pixel is a shape). They sit below the fold, so they load
-// after the page instead of in its first bundle.
-const HeadingStickers = dynamic(() => import("../components/heading-stickers"), { ssr: false });
 
 // "Try it" bento, planned with the stageshow bento rules: one picture made of tiles, not five
 // widgets side by side. Every card: a run-in title in page type on top (bold lead, gray sentence),
@@ -26,9 +21,8 @@ export function Assistants() {
   const a = assistants;
   return (
     <Section id={a.id} className="border-t border-line">
-      <div className="relative mx-auto max-w-2xl text-center">
-        <HeadingStickers />
-        <Heading id={`${a.id}-title`} title={a.title} accent={a.titleAccent} />
+      <div className="mx-auto max-w-2xl text-center">
+        <Heading id={`${a.id}-title`} title={a.title} accent={a.titleAccent} italic />
         <p className="mt-6 text-lg text-muted">{a.body}</p>
       </div>
       <div className={`${headingGap} grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3`}>
@@ -61,7 +55,9 @@ const secondary = `${button} border border-line bg-white text-ink hover:border-i
 const selected = `${button} border-[1.5px] border-ink bg-white text-ink`;
 
 function Logo({ name, size = "size-4", fill }: { name: string; size?: string; fill?: string }) {
-  const logo = networkLogos[name] ?? assistantLogos[name as keyof typeof assistantLogos];
+  // Claude Code has no mark of its own: it wears Claude's.
+  const key = name === "Claude Code" ? "Claude" : name;
+  const logo = networkLogos[key] ?? assistantLogos[key as keyof typeof assistantLogos];
   return (
     <svg aria-hidden viewBox="0 0 24 24" className={cn("shrink-0", size)}>
       <path d={logo.path} fill={fill ?? (name === "Instagram" ? "#d6249f" : logo.color)} />
@@ -71,7 +67,7 @@ function Logo({ name, size = "size-4", fill }: { name: string; size?: string; fi
 
 // 1. Hero UI. Pick your app and a prompt: the tool it calls and the reply. "Schedule" asks for the
 // code; confirming twice shows the second call is a replay, not a second post.
-const appTint: Record<string, string> = { Claude: "bg-[#fbe3d8]", ChatGPT: "bg-[#d7f0e6]", Cursor: "bg-[#e4e4e7]" };
+const appTint: Record<string, string> = { Claude: "bg-[#fbe3d8]", ChatGPT: "bg-[#d7f0e6]", Cursor: "bg-[#e4e4e7]", "Claude Code": "bg-[#fbe3d8]" };
 
 function AssistantCard() {
   const c = assistants.chat;
@@ -167,7 +163,7 @@ function ZonesCard() {
     <Card lead={z.lead} rest={z.rest}>
       <div aria-live="polite" className="flex flex-1 flex-col">
         <p className="text-sm text-muted">Friday 10:00 in {home.city} is</p>
-        <p key={pick} className="bento-pop mt-2 text-[88px] leading-none font-semibold tracking-tighter text-ink tabular-nums">
+        <p key={pick} className="bento-pop mt-2 text-[104px] leading-none font-semibold tracking-tighter text-ink tabular-nums">
           {get("hour")}:{get("minute")}
         </p>
         <p key={`l${pick}`} className="bento-pop mt-3 flex items-center gap-2 text-base text-ink">
@@ -175,14 +171,14 @@ function ZonesCard() {
           <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", time.cls)}>{time.name}</span>
         </p>
         {/* Each city's day as a 24-hour strip, coloured by time of day, with a mark where the post lands. */}
-        <ul aria-hidden className="mt-7 space-y-3.5">
+        <ul aria-hidden className="mt-8 space-y-5">
           {z.list.map((o) => {
             const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: o.tz, hour: "2-digit", hourCycle: "h23" }).format(instant));
             const active = o.city === there.city || o.city === home.city;
             return (
               <li key={o.city} className={cn("grid grid-cols-[5.5rem_1fr] items-center gap-3 text-xs transition-opacity duration-300", active ? "opacity-100" : "opacity-45")}>
                 <span className="font-medium text-ink">{o.city}</span>
-                <span className="relative flex h-3.5 overflow-hidden rounded-full">
+                <span className="relative flex h-4 overflow-hidden rounded-full">
                   {Array.from({ length: 24 }, (_, hr) => (
                     <span key={hr} className={cn("flex-1", sky(hr).cls.split(" ")[0])} />
                   ))}
@@ -213,7 +209,7 @@ function ApprovalsCard() {
   return (
     <Card lead={c.lead} rest={c.rest}>
       {/* The thing being approved, as a small card: the stepper acts on it. */}
-      <div className="mb-6 flex items-center gap-3 rounded-xl border border-line px-3.5 py-3">
+      <div className="mb-8 flex items-center gap-3 rounded-xl border border-line px-3.5 py-3">
         <Logo name="X" size="size-5" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink">Launch thread</span>
@@ -245,7 +241,7 @@ function ApprovalsCard() {
           );
         })}
       </ol>
-      <p key={state} aria-live="polite" className={cn("bento-pop mt-6 rounded-xl px-4 py-3 text-sm leading-relaxed", approved ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900")}>
+      <p key={state} aria-live="polite" className={cn("bento-pop mt-8 rounded-xl px-4 py-3.5 text-[15px] leading-relaxed", approved ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900")}>
         {s.text}
       </p>
       <div className="mt-auto grid grid-cols-2 gap-2 pt-5">

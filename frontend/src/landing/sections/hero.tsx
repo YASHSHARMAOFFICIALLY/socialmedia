@@ -87,8 +87,8 @@ export function Hero() {
               className="group inline-flex min-h-13 items-center gap-3 rounded-full bg-linear-to-b from-white to-[#eef4fb] py-1.5 pr-7 pl-1.5 text-base font-semibold text-ink shadow-[inset_0_1px_0_#fff,0_0_0_1px_rgb(255_255_255/0.6),0_12px_32px_rgb(4_40_90/0.35)] transition-transform duration-200 ease-out hover:-translate-y-0.5"
             >
               <span aria-hidden className="grid size-10 place-items-center rounded-full bg-[#0a6fb6] shadow-[inset_0_1px_0_rgb(255_255_255/0.35)] transition-transform duration-200 ease-out group-hover:scale-105">
-                <svg viewBox="0 0 16 16" className="size-3.5 translate-x-px fill-white">
-                  <path d="M4 2.5v11l9-5.5z" />
+                <svg viewBox="0 0 16 16" className="size-4 fill-none stroke-white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3v10m0 0 4-4m-4 4L4 9" />
                 </svg>
               </span>
               {hero.primary.label}

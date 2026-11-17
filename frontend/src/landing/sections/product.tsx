@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { product } from "../content";
 import { Heading, Section } from "../components/layout";
-import { CalendarScreen } from "../screens/calendar-screen";
-import { AnalyticsScreen } from "../screens/analytics-screen";
+import { CalendarDemoSlot } from "../stageshow/calendar-demo-slot";
+import { AnalyticsDemoSlot } from "../stageshow/analytics-demo-slot";
 
 // Two split blocks, text beside a screen, alternating sides so the section doesn't repeat itself.
 export function Product() {
@@ -15,10 +15,10 @@ export function Product() {
       </h2>
       <div className="space-y-24 sm:space-y-32">
         <Split eyebrow={calendar.eyebrow} title={calendar.title} accent={calendar.titleAccent} points={calendar.points}>
-          <CalendarScreen />
+          <CalendarDemoSlot />
         </Split>
         <Split flip eyebrow={analytics.eyebrow} title={analytics.title} accent={analytics.titleAccent} points={analytics.points}>
-          <AnalyticsScreen />
+          <AnalyticsDemoSlot />
         </Split>
       </div>
     </Section>

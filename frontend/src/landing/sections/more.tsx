@@ -5,7 +5,7 @@ import { Section, headingGap } from "../components/layout";
 export function More() {
   return (
     <Section id="more" className="border-t border-line">
-      <h2 id="more-title" className="font-heading text-heading font-semibold text-ink">
+      <h2 id="more-title" className="font-heading text-heading text-ink">
         {more.title}
       </h2>
       <dl className={`${headingGap} grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-5`}>

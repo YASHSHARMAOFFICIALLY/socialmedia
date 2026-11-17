@@ -14,11 +14,13 @@ export function Section({ id, className, children }: { id?: string; className?: 
   );
 }
 
-// Section headline: Instrument Serif with the accent phrase in italic (Ribbon and TapMac style).
-export function Heading({ id, title, accent, className }: { id?: string; title: string; accent: string; className?: string }) {
+// Section headline: Instrument Serif (Ribbon and TapMac style).
+// The italic accent is a device, so it is kept for the one headline that earns it (`italic`); the rest
+// set the same words in the regular face.
+export function Heading({ id, title, accent, className, italic = false }: { id?: string; title: string; accent: string; className?: string; italic?: boolean }) {
   return (
     <h2 id={id} className={cn("font-heading text-heading text-ink", className)}>
-      {title} <em>{accent}</em>
+      {title} {italic ? <em>{accent}</em> : accent}
     </h2>
   );
 }

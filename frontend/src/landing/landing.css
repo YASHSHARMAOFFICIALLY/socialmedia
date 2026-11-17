@@ -215,7 +215,7 @@
   to { --bento-s: 0; }
 }
 @keyframes bento-rise {
-  from { opacity: 0; translate: 0 24px; filter: blur(4px); }
+  from { opacity: 0; translate: 0 24px; }
 }
 @keyframes bento-pop {
   from { opacity: 0; translate: 0 6px; }

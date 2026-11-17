@@ -86,11 +86,11 @@ export function PostRallyComposer() {
     <Stage
       width={1040}
       height={420}
-      compact={{ below: 640, width: 358, height: 400 }}
+      compact={{ below: 640, width: 358, height: 350 }}
       initial={initial}
       poster={POSTER}
       script={script}
-      cursor={{ at: { wide: { x: 979, y: 389 }, compact: { x: 317, y: 379 } } }}
+      cursor={{ at: { wide: { x: 979, y: 389 }, compact: { x: 317, y: 330 } } }}
       className="dc"
     >
       {(s, _rect, layout) => {
@@ -129,7 +129,7 @@ export function PostRallyComposer() {
                   <Collapse open={!thread}>
                     <div className="dc-media" aria-hidden>
                       {[0, 1, 2, 3].map((i) => (
-                        <Bar key={i} w={72} h={72} r={8} tone={i === 0 ? 3 : 2} />
+                        <Bar key={i} w={92} h={92} r={10} tone={i === 0 ? 3 : 2} />
                       ))}
                     </div>
                   </Collapse>

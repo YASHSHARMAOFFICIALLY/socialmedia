@@ -19,7 +19,7 @@ export function Faq() {
     <Section id="faq" className="border-t border-line">
       <div className="grid gap-12 lg:grid-cols-[1fr_2fr] lg:gap-16">
         <div>
-          <h2 id="faq-title" className="font-heading text-heading font-semibold text-ink">
+          <h2 id="faq-title" className="font-heading text-heading text-ink">
             {faq.title}
           </h2>
           <p className="mt-6 max-w-sm text-lg text-muted">{faq.intro}</p>

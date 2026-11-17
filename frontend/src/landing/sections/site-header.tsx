@@ -14,7 +14,7 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
           <LogoMark />
           {productName}
         </Link>
-        <ul className="mx-auto hidden items-center sm:flex">
+        <ul className="mx-auto hidden items-center lg:flex">
           {nav.map((item) => (
             <li key={item.href}>
               <a href={item.href} className="inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-medium opacity-90 transition-opacity hover:opacity-100">
@@ -23,7 +23,7 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
             </li>
           ))}
         </ul>
-        <Link href="/login" className="ml-auto inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-medium opacity-90 transition-opacity hover:opacity-100 sm:ml-0">
+        <Link href="/login" className="ml-auto inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-medium opacity-90 transition-opacity hover:opacity-100 lg:ml-0">
           Log in
         </Link>
         <Link href="/signup" className="site-nav-cta inline-flex min-h-11 items-center rounded-full px-5 text-sm font-medium">
