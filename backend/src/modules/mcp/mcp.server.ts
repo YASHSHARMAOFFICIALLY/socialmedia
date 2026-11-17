@@ -14,7 +14,7 @@ export const TOOLS: ToolDef[] = [...analyticsTools, ...contentTools, ...publishT
 
 /** One server per request/caller. Holds no state: safe for concurrent customers on any number of Worker isolates. */
 export function buildMcpServer(deps: McpDeps, principal: Principal): McpServer {
-  const server = new McpServer({ name: "distora", version: "1.0.0" });
+  const server = new McpServer({ name: "postrally", version: "1.0.0" });
   for (const def of TOOLS) {
     server.registerTool(def.name, { title: def.title, description: def.description, inputSchema: def.input, annotations: { readOnlyHint: def.readOnly !== false, destructiveHint: def.destructive === true, openWorldHint: def.openWorld === true } }, async (args: Record<string, unknown>) => {
       let ws: string | null = null;

@@ -21,4 +21,4 @@ npm run dev                             # http://localhost:8787  (/docs = Swagge
 * Architecture: `docs/architecture.md` · Schema: `docs/database-schema.md` · API: `docs/api-documentation.md`
 * Platform capabilities, API limits and external approval gates: `docs/integrations.md`
 * Progress, decisions, known limitations: `docs/PROGRESS.md`
-* Billing (Dodo Payments, entitlements, usage): `docs/billing.md` · MCP (remote `/mcp`, `distora` CLI): `docs/mcp.md`
+* Billing (Dodo Payments, entitlements, usage): `docs/billing.md` · MCP (remote `/mcp`, `postrally` CLI): `docs/mcp.md`

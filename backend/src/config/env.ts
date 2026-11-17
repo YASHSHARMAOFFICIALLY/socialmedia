@@ -43,6 +43,9 @@ const schema = z.object({
   AI_MODEL: z.string().default("claude-haiku-5-5"),
   AI_DAILY_LIMIT: z.coerce.number().int().min(1).default(200),
   RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("PostRally <noreply@postrally.app>"), // must be on a domain verified in Resend, else only the Resend account owner receives mail
+  MICROSOFT_CLIENT_ID: z.string().optional(),   // Outlook/Hotmail/Microsoft 365 sign-in
+  MICROSOFT_CLIENT_SECRET: z.string().optional(),
 });
 
 export type Config = z.infer<typeof schema>;

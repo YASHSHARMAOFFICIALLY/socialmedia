@@ -44,11 +44,16 @@ export function createAuth(db: Db, cfg: Config, mailer: Mailer) {
       sendOnSignUp: true, autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => { await mailer.send({ to: user.email, subject: "Verify your email", html: `<p><a href="${url}">Verify your email address</a></p>` }); },
     },
-    // Google sign-in reuses the Google OAuth client (also used for YouTube); it is only on when both are set.
-    // The client must allow ${BETTER_AUTH_URL}/api/auth/callback/google as a redirect URI.
-    ...(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET
-      ? { socialProviders: { google: { clientId: cfg.GOOGLE_CLIENT_ID, clientSecret: cfg.GOOGLE_CLIENT_SECRET, prompt: "select_account" as const } } }
-      : {}),
+    // Social sign-in, each on only when its id+secret are set. Google reuses the YouTube OAuth client; Microsoft covers
+    // personal Outlook/Hotmail and work/school accounts. Redirect URIs: ${BETTER_AUTH_URL}/api/auth/callback/{google,microsoft}
+    socialProviders: {
+      ...(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET
+        ? { google: { clientId: cfg.GOOGLE_CLIENT_ID, clientSecret: cfg.GOOGLE_CLIENT_SECRET, prompt: "select_account" as const } }
+        : {}),
+      ...(cfg.MICROSOFT_CLIENT_ID && cfg.MICROSOFT_CLIENT_SECRET
+        ? { microsoft: { clientId: cfg.MICROSOFT_CLIENT_ID, clientSecret: cfg.MICROSOFT_CLIENT_SECRET, tenantId: "common", prompt: "select_account" as const } }
+        : {}),
+    },
     plugins: [username()],
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     // Behind Cloudflare the real client address is cf-connecting-ip. Counters live in Postgres so they hold across isolates.

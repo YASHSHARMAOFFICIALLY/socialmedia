@@ -53,7 +53,7 @@ export async function pollDevice(apiUrl: string, d: DeviceStart, o: { f?: typeof
  * and only wipe the store when the server says the grant is gone (a 429/5xx must not log the user out).
  */
 export async function refresh(c: Credentials, f?: typeof fetch, now = Date.now()): Promise<Credentials> {
-  if (!c.refreshToken) throw new ApiError("no_refresh", "Session expired; run `distora mcp login`");
+  if (!c.refreshToken) throw new ApiError("no_refresh", "Session expired; run `postrally mcp login`");
   const newer = () => { const s = store.load(); return s?.refreshToken && s.refreshToken !== c.refreshToken ? s : null; };
   const adopted = newer();
   if (adopted?.expiresAt && adopted.expiresAt - now > 60_000) return adopted;
@@ -67,7 +67,7 @@ export async function refresh(c: Credentials, f?: typeof fetch, now = Date.now()
     const raced = newer();     // lost a race with another process that has saved newer tokens since
     if (raced) return raced;
     store.clear();
-    throw new ApiError("invalid_grant", "Session ended; run `distora mcp login`");
+    throw new ApiError("invalid_grant", "Session ended; run `postrally mcp login`");
   }
   throw new ApiError("refresh_failed", "Could not refresh the session right now; try again shortly");
 }

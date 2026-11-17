@@ -57,7 +57,7 @@ import { createMetrics } from "./modules/ops/metrics.js";
 
 /** Composition root: the only place concrete implementations are wired together. */
 export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: Mailer; adapters?: SocialAdapter[]; queue: JobQueue; analyticsQueue: JobQueue<AnalyticsMessage>; cache?: CacheStore; engine?: Partial<EngineDeps>; storage?: ObjectStorage | null; webhookFetch?: typeof fetch; aiProvider?: AiProvider | null; images?: ImageTransformer | null; videos?: VideoTransformer | null; payments?: PaymentProvider | null; defer?: (p: Promise<unknown>) => void }): Promise<Deps> {
-  const mailer = o.mailer ?? createMailer({ apiKey: cfg.RESEND_API_KEY }, log);
+  const mailer = o.mailer ?? createMailer({ apiKey: cfg.RESEND_API_KEY, from: cfg.EMAIL_FROM }, log);
   const adapters = o.adapters ?? [
     ...(cfg.LINKEDIN_CLIENT_ID && cfg.LINKEDIN_CLIENT_SECRET ? [createLinkedInAdapter({ clientId: cfg.LINKEDIN_CLIENT_ID, clientSecret: cfg.LINKEDIN_CLIENT_SECRET })] : []),
     ...(cfg.X_CLIENT_ID && cfg.X_CLIENT_SECRET ? [createXAdapter({ clientId: cfg.X_CLIENT_ID, clientSecret: cfg.X_CLIENT_SECRET })] : []),

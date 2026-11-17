@@ -9,7 +9,7 @@ type Remote = Pick<Client, "listTools" | "callTool" | "listResources" | "readRes
  * It adds no logic of its own: every call is forwarded, so entitlements, scopes and workspace checks stay server-side.
  */
 export async function createProxyServer(remote: Remote): Promise<McpServer> {
-  const server = new McpServer({ name: "distora", version: "1.0.0" });
+  const server = new McpServer({ name: "postrally", version: "1.0.0" });
   for (const t of (await remote.listTools()).tools) {
     server.registerTool(t.name, { ...(t.title ? { title: t.title } : {}), description: t.description ?? "", inputSchema: fromJsonSchema(t.inputSchema as never), ...(t.annotations ? { annotations: t.annotations } : {}) },
       (async (args: Record<string, unknown>) => remote.callTool({ name: t.name, arguments: args })) as never);

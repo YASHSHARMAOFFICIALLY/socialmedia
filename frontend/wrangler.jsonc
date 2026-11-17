@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "socialmedia-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "socialmedia-web" }
+  ],
+  "r2_buckets": [
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "socialmedia-web-cache" }
+  ],
+  "images": { "binding": "IMAGES" },
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "postrally.app", "custom_domain": true },
+    { "pattern": "www.postrally.app", "custom_domain": true }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_SITE_URL": "https://postrally.app",
+    "NEXT_PUBLIC_API_URL": "https://api.postrally.app"
+  }
+}

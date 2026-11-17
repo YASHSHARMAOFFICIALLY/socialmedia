@@ -29,7 +29,7 @@ export function mcpRoutes(d: McpRouteDeps) {
   // RFC 9728 protected resource metadata. Tokens come from the device flow or a personal access token; there is no browser OAuth redirect flow.
   const meta: RequestHandler = (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
-    res.json({ resource: `${baseUrl(req, d.publicUrl)}/mcp`, bearer_methods_supported: ["header"], scopes_supported: SCOPES, resource_name: "Distora MCP", authorization_servers: [baseUrl(req, d.publicUrl)], device_authorization_endpoint: `${baseUrl(req, d.publicUrl)}/mcp/device`, token_endpoint: `${baseUrl(req, d.publicUrl)}/mcp/token` });
+    res.json({ resource: `${baseUrl(req, d.publicUrl)}/mcp`, bearer_methods_supported: ["header"], scopes_supported: SCOPES, resource_name: "PostRally MCP", authorization_servers: [baseUrl(req, d.publicUrl)], device_authorization_endpoint: `${baseUrl(req, d.publicUrl)}/mcp/device`, token_endpoint: `${baseUrl(req, d.publicUrl)}/mcp/token` });
   };
   r.get(["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"], meta);
   // RFC 8414 authorization server metadata (the API is its own authorization server).

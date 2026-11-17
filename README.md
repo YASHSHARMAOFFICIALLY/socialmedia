@@ -1,4 +1,4 @@
-# socialmedia
+# PostRally
 
-* `backend/` — API on Cloudflare Workers, `distora` CLI, docs. See `backend/README.md`.
-* `frontend-2/` — web app + landing page.
+* `backend/` — API on Cloudflare Workers, `postrally` CLI, docs. See `backend/README.md`.
+* `frontend/` — web app + landing page.

@@ -33,17 +33,17 @@ Publishing (scope `content:publish`, `publish:create` permission, plan `posts_pe
 
 Add a tool: create it with `defineTool({name, scope, input, handler})` in a tools file and list it in `TOOLS` (`mcp.server.ts`).
 
-## Local: `distora` CLI (`cli/`)
+## Local: `postrally` CLI (`cli/`)
 A stdio bridge that forwards to remote `/mcp`, so tool contracts are identical. It holds no database or platform credentials.
 ```
-distora mcp login --api-url https://api.example.com   # device flow; opens the browser
-distora mcp status | logout
-distora mcp serve                                      # what the MCP client launches
+postrally mcp login --api-url https://api.example.com   # device flow; opens the browser
+postrally mcp status | logout
+postrally mcp serve                                      # what the MCP client launches
 ```
-Credentials: macOS Keychain (`security`), Linux Secret Service (`secret-tool`), else a 0600 file. `DISTORA_TOKEN` + `DISTORA_API_URL` override for CI/headless (a PAT). All logs go to stderr; stdout is protocol only. Refresh tokens rotate and are saved before use.
+Credentials: macOS Keychain (`security`), Linux Secret Service (`secret-tool`), else a 0600 file. `POSTRALLY_TOKEN` + `POSTRALLY_API_URL` override for CI/headless (a PAT). All logs go to stderr; stdout is protocol only. Refresh tokens rotate and are saved before use.
 Client config (Claude Desktop / Cursor / Claude Code):
 ```json
-{ "mcpServers": { "distora": { "command": "npx", "args": ["-y", "distora", "mcp", "serve"] } } }
+{ "mcpServers": { "postrally": { "command": "npx", "args": ["-y", "postrally", "mcp", "serve"] } } }
 ```
 Remote with a PAT (clients supporting headers): `{"type":"http","url":"https://api.example.com/mcp","headers":{"Authorization":"Bearer dsp_…"}}`.
 

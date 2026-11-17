@@ -90,7 +90,7 @@ Feature inventory (group into "Via X" bento + detail bento + FAQ):
 - **Campaigns:** group posts, performance, compare campaigns. **Competitors:** public X + YouTube data.
 - **Team:** workspaces, roles (owner/admin/editor/analyst/viewer), email invites, optional approval flow (writer, reviewer, publisher; edits void approval), audit log.
 - **Notify + report:** in-app + email alerts, outbound webhooks, CSV + PDF reports.
-- **AI + developers (lead angle):** MCP server for Claude/ChatGPT/Cursor (read analytics, draft, publish with signed confirmation code); browser or device-code login; `distora` CLI; REST API with docs.
+- **AI + developers (lead angle):** MCP server for Claude/ChatGPT/Cursor (read analytics, draft, publish with signed confirmation code); browser or device-code login; `postrally` CLI; REST API with docs.
 - **Billing:** per-workspace plans via Dodo Payments. Prices are placeholders; don't show numbers until real.
 
 Don't claim: LinkedIn company pages/analytics, Reddit, Snapchat, long-video transcoding. Nothing is live-verified yet; avoid "trusted by" / user-count claims.

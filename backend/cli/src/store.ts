@@ -6,8 +6,8 @@ import { join } from "node:path";
 /** What we keep per login. Secrets never go to stdout or logs. */
 export interface Credentials { apiUrl: string; accessToken: string; refreshToken?: string; expiresAt?: number; workspaceId?: string; scope?: string }
 
-const SERVICE = "distora-mcp", ACCOUNT = "default";
-const dir = () => process.env["DISTORA_CONFIG_DIR"] ?? join(process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config"), "distora");
+const SERVICE = "postrally-mcp", ACCOUNT = "default";
+const dir = () => process.env["POSTRALLY_CONFIG_DIR"] ?? join(process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config"), "postrally");
 const file = () => join(dir(), "credentials.json");
 
 interface Backend { name: string; read(): string | null; write(v: string): void; remove(): void }
@@ -26,7 +26,7 @@ const macKeychain: Backend = {
 const secretService: Backend = {
   name: "Secret Service",
   read: () => { const r = spawnSync("secret-tool", ["lookup", "service", SERVICE, "account", ACCOUNT], { encoding: "utf8" }); return r.status === 0 && r.stdout ? r.stdout : null; },
-  write: (v) => { const r = spawnSync("secret-tool", ["store", "--label=Distora MCP", "service", SERVICE, "account", ACCOUNT], { input: v }); if (r.status !== 0) throw new Error("secret-tool failed"); },
+  write: (v) => { const r = spawnSync("secret-tool", ["store", "--label=PostRally MCP", "service", SERVICE, "account", ACCOUNT], { input: v }); if (r.status !== 0) throw new Error("secret-tool failed"); },
   remove: () => { spawnSync("secret-tool", ["clear", "service", SERVICE, "account", ACCOUNT]); },
 };
 /** Last resort: a 0600 file in the user's config directory. */
@@ -39,7 +39,7 @@ const fileStore: Backend = {
 const hasTool = (cmd: string) => spawnSync(cmd, ["--version"], { stdio: "ignore" }).error === undefined || spawnSync("which", [cmd], { stdio: "ignore" }).status === 0;
 
 export function pickBackend(): Backend {
-  if (process.env["DISTORA_CONFIG_DIR"]) return fileStore;                       // explicit directory (tests, containers)
+  if (process.env["POSTRALLY_CONFIG_DIR"]) return fileStore;                       // explicit directory (tests, containers)
   if (platform() === "darwin") return macKeychain;
   if (platform() === "linux" && hasTool("secret-tool")) return secretService;
   return fileStore;

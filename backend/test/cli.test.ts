@@ -17,7 +17,7 @@ const json = (status: number, body: object) => new Response(JSON.stringify(body)
 const dev = { device_code: "dsd_x", user_code: "ABCD-2345", verification_uri: "u", verification_uri_complete: "u?c", expires_in: 600, interval: 5 };
 
 describe("CLI: login, refresh, storage", () => {
-  beforeEach(() => { process.env["DISTORA_CONFIG_DIR"] = mkdtempSync(join(tmpdir(), "distora-")); });
+  beforeEach(() => { process.env["POSTRALLY_CONFIG_DIR"] = mkdtempSync(join(tmpdir(), "postrally-")); });
 
   it("device polling honors authorization_pending and slow_down, then returns credentials; denial and expiry are errors", async () => {
     const replies = [json(400, { error: "authorization_pending" }), json(400, { error: "slow_down" }), json(200, { access_token: "A", refresh_token: "R", expires_in: 3600, workspace_id: "w", scope: "analytics:read" })];
@@ -39,7 +39,7 @@ describe("CLI: login, refresh, storage", () => {
 
   it("credentials file is private (0600); refresh saves the rotated token first and clears the store when the server rejects it", async () => {
     store.save({ apiUrl: "https://api.test", accessToken: "A1", refreshToken: "R1", expiresAt: 1 });
-    expect(statSync(join(process.env["DISTORA_CONFIG_DIR"]!, "credentials.json")).mode & 0o777).toBe(0o600);
+    expect(statSync(join(process.env["POSTRALLY_CONFIG_DIR"]!, "credentials.json")).mode & 0o777).toBe(0o600);
     const next = await refresh(store.load()!, (async () => json(200, { access_token: "A2", refresh_token: "R2", expires_in: 3600 })) as never);
     expect(next).toMatchObject({ accessToken: "A2", refreshToken: "R2" });
     expect(store.load()).toMatchObject({ accessToken: "A2", refreshToken: "R2" });
@@ -105,9 +105,9 @@ describe("CLI: bridge to the real server", async () => {
     await c.close(); await remote.close();
   });
 
-  it("stdio subprocess: `distora mcp serve` speaks clean MCP on stdout, logs to stderr, uses DISTORA_TOKEN", async () => {
+  it("stdio subprocess: `postrally mcp serve` speaks clean MCP on stdout, logs to stderr, uses POSTRALLY_TOKEN", async () => {
     const token = await pat();
-    const transport = new StdioClientTransport({ command: process.execPath, args: ["--import", "tsx", "cli/src/main.ts", "mcp", "serve"], env: { ...(process.env as Record<string, string>), DISTORA_TOKEN: token, DISTORA_API_URL: `http://127.0.0.1:${port}` }, stderr: "pipe" });
+    const transport = new StdioClientTransport({ command: process.execPath, args: ["--import", "tsx", "cli/src/main.ts", "mcp", "serve"], env: { ...(process.env as Record<string, string>), POSTRALLY_TOKEN: token, POSTRALLY_API_URL: `http://127.0.0.1:${port}` }, stderr: "pipe" });
     let err = "";
     const c = new Client({ name: "host", version: "1" }, { versionNegotiation: { mode: "auto" } });
     await c.connect(transport);
@@ -120,8 +120,8 @@ describe("CLI: bridge to the real server", async () => {
 
   it("serve without credentials fails with a clear message and exit code 1", async () => {
     const { spawnSync } = await import("node:child_process");
-    const env = { ...process.env, DISTORA_CONFIG_DIR: mkdtempSync(join(tmpdir(), "distora-")) } as Record<string, string>;
-    delete env["DISTORA_TOKEN"];
+    const env = { ...process.env, POSTRALLY_CONFIG_DIR: mkdtempSync(join(tmpdir(), "postrally-")) } as Record<string, string>;
+    delete env["POSTRALLY_TOKEN"];
     const r = spawnSync(process.execPath, ["--import", "tsx", "cli/src/main.ts", "mcp", "serve"], { env, encoding: "utf8" });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("Not logged in");

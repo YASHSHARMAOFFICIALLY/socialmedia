@@ -1,9 +1,9 @@
 {
-  "name": "distora",
+  "name": "postrally",
   "version": "1.0.0",
-  "description": "Local MCP bridge: stdio server for MCP clients that forwards to your Distora workspace. Holds no database or social-platform credentials.",
+  "description": "Local MCP bridge: stdio server for MCP clients that forwards to your PostRally workspace. Holds no database or social-platform credentials.",
   "type": "module",
-  "bin": { "distora": "dist/main.js" },
+  "bin": { "postrally": "dist/main.js" },
   "files": ["dist"],
   "engines": { "node": ">=20" },
   "scripts": { "build": "tsc -p tsconfig.json" },
