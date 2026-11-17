@@ -4,6 +4,8 @@ import { comparedOn, type ComparePage } from "./seo-pages";
 import { SiteHeader } from "./sections/site-header";
 import { SiteFooter } from "./sections/site-footer";
 import { gutter } from "./components/layout";
+import { AssistantDemoSlot } from "./stageshow/assistant-demo-slot";
+import { compareDemo } from "./stageshow/assistant-demos";
 
 // /vs/<slug>: a side-by-side table, where the other tool is stronger, where PostRally differs, and the
 // sources with the date they were checked. Same white page, header and footer as the rest of the site.
@@ -13,8 +15,16 @@ export function ComparePageView({ page }: { page: ComparePage }) {
       <SiteHeader solid />
       <main className={`${gutter} pt-36 pb-24 sm:pt-44 sm:pb-32`}>
         <p className="text-sm font-medium text-muted">Compare</p>
-        <h1 className="mt-4 font-heading text-heading text-ink">{page.title}</h1>
-        <p className="mt-6 max-w-2xl text-lg text-muted">{page.description}</p>
+        <div className="mt-4 grid items-center gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-6">
+          <div>
+            <h1 className="font-heading text-heading text-ink">{page.title}</h1>
+            <p className="mt-6 max-w-2xl text-lg text-muted">{page.description}</p>
+            <Link href="/signup" className="mt-8 inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink/85">
+              Try PostRally
+            </Link>
+          </div>
+          <AssistantDemoSlot demo={compareDemo(page)} caption={`An assistant asked whether to use PostRally or ${page.name}: it answers from the checked comparison below.`} />
+        </div>
 
         <div className="mt-14 overflow-x-auto rounded-2xl border border-line">
           <table className="w-full min-w-[36rem] border-collapse text-left text-sm">

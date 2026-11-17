@@ -6,6 +6,8 @@
 export type SeoPage = {
   slug: string;
   name: string;
+  /** The product's own site. Footer links and the page's secondary button go here. */
+  site?: string;
   title: string; // <title> and h1
   description: string; // meta description and intro
   points: string[];
@@ -16,6 +18,7 @@ export const integrations: SeoPage[] = [
   {
     slug: "claude",
     name: "Claude",
+    site: "https://claude.ai",
     title: "Schedule social media posts from Claude",
     description: "Connect PostRally to Claude and ask in plain words: read your analytics, draft posts for each network and schedule them. Nothing goes out until you confirm.",
     points: [
@@ -30,6 +33,7 @@ export const integrations: SeoPage[] = [
   {
     slug: "chatgpt",
     name: "ChatGPT",
+    site: "https://chatgpt.com",
     title: "Schedule social media posts from ChatGPT",
     description: "Use PostRally inside ChatGPT to check how your posts did, draft new ones per network and schedule them, with a confirmation step before anything is published.",
     points: [
@@ -43,6 +47,7 @@ export const integrations: SeoPage[] = [
   {
     slug: "cursor",
     name: "Cursor",
+    site: "https://cursor.com",
     title: "Schedule social media posts from Cursor",
     description: "Run the PostRally CLI once and Cursor can draft, check and schedule your posts through PostRally's MCP server while you work.",
     points: [
@@ -56,6 +61,7 @@ export const integrations: SeoPage[] = [
   {
     slug: "claude-code",
     name: "Claude Code",
+    site: "https://claude.com/product/claude-code",
     title: "Schedule social media posts from Claude Code",
     description: "Use PostRally from Claude Code in your terminal: check analytics, draft posts and schedule them without leaving the repo.",
     points: [
@@ -83,6 +89,7 @@ export const channels: SeoPage[] = [
   {
     slug: "instagram",
     name: "Instagram",
+    site: "https://www.instagram.com",
     title: "Instagram scheduler",
     description: "Schedule Instagram posts, carousels and Reels with PostRally, check them against Instagram's formats before they go out, and see likes, comments, reach and audience demographics.",
     points: ["Carousels, including video slides, and Reels.", "Media checked against Instagram's formats on upload.", "Audience demographics alongside likes and comments.", "Its own caption and media when you post the same idea elsewhere."],
@@ -90,6 +97,7 @@ export const channels: SeoPage[] = [
   {
     slug: "x",
     name: "X",
+    site: "https://x.com",
     title: "X (Twitter) scheduler",
     description: "Write threads and polls for X, keep each post under 280 characters, and schedule them in your timezone with PostRally.",
     points: ["Threads and polls.", "Each post checked against the 280-character limit.", "Public numbers for competitor accounts on X.", "Best posting time, shown once there are enough posts."],
@@ -97,6 +105,7 @@ export const channels: SeoPage[] = [
   {
     slug: "linkedin",
     name: "LinkedIn",
+    site: "https://www.linkedin.com",
     title: "LinkedIn post scheduler",
     description: "Schedule LinkedIn posts from your personal profile with PostRally, alongside the same post adjusted for your other networks.",
     points: ["Posts on your personal profile.", "Company pages are not supported yet: they need partner approval from LinkedIn.", "Team approval before anything goes out, if you want it."],
@@ -104,6 +113,7 @@ export const channels: SeoPage[] = [
   {
     slug: "youtube",
     name: "YouTube",
+    site: "https://www.youtube.com",
     title: "YouTube video scheduler",
     description: "Upload YouTube videos with a title, thumbnail and scheduled release through PostRally, and track views and watch time.",
     points: ["Video, thumbnail and scheduled release time.", "Watch time and views per video.", "Public numbers for competitor channels."],
@@ -111,6 +121,7 @@ export const channels: SeoPage[] = [
   {
     slug: "threads",
     name: "Threads",
+    site: "https://www.threads.com",
     title: "Threads scheduler",
     description: "Schedule Threads posts and carousels with PostRally, checked against Threads' 500-character limit before they go out.",
     points: ["Text up to 500 characters, counting emoji the way Threads does.", "Carousels of 2 to 20 images or videos."],
@@ -118,6 +129,7 @@ export const channels: SeoPage[] = [
   {
     slug: "facebook",
     name: "Facebook",
+    site: "https://www.facebook.com",
     title: "Facebook Page post scheduler",
     description: "Schedule posts to your Facebook Pages with PostRally and see how each one did next to your other networks.",
     points: ["Posts to Facebook Pages.", "Page and post stats collected automatically."],
@@ -125,6 +137,7 @@ export const channels: SeoPage[] = [
   {
     slug: "pinterest",
     name: "Pinterest",
+    site: "https://www.pinterest.com",
     title: "Pinterest pin scheduler",
     description: "Schedule Pinterest pins and video pins with PostRally, with titles and descriptions checked against Pinterest's limits.",
     points: ["Image and video pins.", "Title, description, link and alt text checked against Pinterest's limits.", "Pin stats collected automatically."],
@@ -132,6 +145,7 @@ export const channels: SeoPage[] = [
   {
     slug: "tiktok",
     name: "TikTok",
+    site: "https://www.tiktok.com",
     title: "TikTok video scheduler",
     description: "Schedule TikTok videos with PostRally and keep their stats next to your other networks.",
     points: ["Video posts with captions.", "Video stats collected automatically."],
@@ -139,6 +153,7 @@ export const channels: SeoPage[] = [
   {
     slug: "bluesky",
     name: "Bluesky",
+    site: "https://bsky.app",
     title: "Bluesky post scheduler",
     description: "Schedule Bluesky posts with PostRally, checked against the 300-character limit, with up to four images or a video.",
     points: ["Text up to 300 characters.", "Up to four images, or a video."],
@@ -146,6 +161,7 @@ export const channels: SeoPage[] = [
   {
     slug: "mastodon",
     name: "Mastodon",
+    site: "https://joinmastodon.org",
     title: "Mastodon post scheduler",
     description: "Schedule posts to any Mastodon instance with PostRally. Limits are read from your instance, not guessed.",
     points: ["Works with any instance.", "Character and media limits read from your instance (500 by default)."],
@@ -153,6 +169,7 @@ export const channels: SeoPage[] = [
   {
     slug: "telegram",
     name: "Telegram",
+    site: "https://telegram.org",
     title: "Telegram channel post scheduler",
     description: "Schedule posts and albums to Telegram channels with PostRally, next to the rest of your networks.",
     points: ["Posts and media albums.", "Scheduled in your timezone like every other network."],

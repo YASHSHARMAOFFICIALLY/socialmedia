@@ -103,10 +103,19 @@ export function SiteFooter() {
           <Column title="Use it from">
             {integrations.map((p) => (
               <li key={p.slug}>
-                <Link href={`/integrations/${p.slug}`} className={linkClass}>
-                  <Glyph name={p.name === "Claude Code" ? "Claude" : p.name} />
-                  {p.name}
-                </Link>
+                {/* Opens the product's own site; the REST API has none, so it opens our page. */}
+                {p.site ? (
+                  <a href={p.site} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                    <Glyph name={p.name === "Claude Code" ? "Claude" : p.name} />
+                    {p.name}
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                ) : (
+                  <Link href={`/integrations/${p.slug}`} className={linkClass}>
+                    <Glyph name={p.name} />
+                    {p.name}
+                  </Link>
+                )}
               </li>
             ))}
           </Column>
