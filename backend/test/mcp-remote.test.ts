@@ -109,7 +109,7 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     await upgrade(ws);
     const start = (await request(t.app).post("/mcp/device").send({ client_name: "postrally-cli", scopes: ["analytics:read", "billing:read"] })).body;
     expect(start.user_code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-    expect(start.verification_uri_complete).toBeUndefined();   // the user must type the code: a link cannot pre-fill it
+    expect(start.verification_uri_complete).not.toContain(start.user_code);   // the user must type the code (older CLIs still get a URL to open)
     const poll = (code = start.device_code) => request(t.app).post("/mcp/token").type("form").send({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code: code });
     expect((await poll()).body.error).toBe("authorization_pending");
     expect((await poll()).body.error).toBe("slow_down");                                              // polled again within the interval

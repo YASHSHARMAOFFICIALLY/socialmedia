@@ -117,7 +117,7 @@ export function createMcpAuth(deps: { db: Db; workspaces: WorkspaceService }) {
       const scopes = normalizeScopes(i.scopes.length ? i.scopes : DEFAULT_SCOPES)   // least privilege by default; the portal link is opt-in;
       const device = secret("dsd"), code = userCode();
       await db.query("INSERT INTO mcp_device_codes (device_code_hash, user_code, client_name, scopes, expires_at) VALUES ($1,$2,$3,$4, now() + make_interval(secs => $5))", [sha256(device), code, i.clientName.slice(0, 80), scopes, DEVICE_CODE_TTL_S]);
-      return { device_code: device, user_code: code, verification_uri: `${verificationBase}/mcp/device`, expires_in: DEVICE_CODE_TTL_S, interval: POLL_INTERVAL_S };
+      return { device_code: device, user_code: code, verification_uri: `${verificationBase}/mcp/device`, verification_uri_complete: `${verificationBase}/mcp/device`, expires_in: DEVICE_CODE_TTL_S, interval: POLL_INTERVAL_S };
     },
     async deviceInfo(code: string) {
       const r = (await db.query<{ client_name: string; scopes: string[] }>("SELECT client_name, scopes FROM mcp_device_codes WHERE user_code = $1 AND status = 'pending' AND expires_at > now()", [code.toUpperCase()])).rows[0];
