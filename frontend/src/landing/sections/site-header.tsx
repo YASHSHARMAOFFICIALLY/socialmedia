@@ -9,7 +9,7 @@ import { nav, productName } from "../content";
 export function SiteHeader({ solid = false }: { solid?: boolean }) {
   return (
     <header className="fixed inset-x-0 top-0 z-40 flex justify-center px-3 pt-3 sm:px-4 sm:pt-4">
-      <nav aria-label="Main" className={`site-nav ${solid ? "is-solid" : ""} flex w-full max-w-[1200px] items-center gap-2 rounded-full py-1.5 pr-1.5 pl-2`}>
+      <nav aria-label="Main" className={`site-nav ${solid ? "is-solid" : ""} flex w-full whitespace-nowrap max-w-[1200px] items-center gap-2 rounded-full py-1.5 pr-1.5 pl-2`}>
         <Link href="/" className="inline-flex min-h-11 items-center gap-2.5 rounded-full pr-2 font-heading text-2xl">
           <LogoMark />
           {productName}
@@ -26,8 +26,8 @@ export function SiteHeader({ solid = false }: { solid?: boolean }) {
         <Link href="/login" className="ml-auto inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-medium opacity-90 transition-opacity hover:opacity-100 lg:ml-0">
           Log in
         </Link>
-        <Link href="/signup" className="site-nav-cta inline-flex min-h-11 items-center rounded-full px-5 text-sm font-medium">
-          Sign up
+        <Link href="/signup" className="site-nav-cta inline-flex min-h-11 shrink-0 items-center rounded-full px-5 text-sm font-semibold transition-transform duration-150 hover:-translate-y-px">
+          Get started
         </Link>
       </nav>
     </header>

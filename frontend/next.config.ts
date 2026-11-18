@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 // Markdown twins (src/app/md): `/x.md` and `Accept: text/markdown` on a public page both serve /md/x.
 // Keep these paths in step with lib/ai-pages.ts (sitemap and llms files are generated from it).
-const pages = ["/integrations/:slug", "/channels/:slug", "/vs/:slug", "/privacy", "/terms"];
+const pages = ["/integrations/:slug", "/channels/:slug", "/vs/:slug", "/pricing", "/privacy", "/terms"];
 const wantsMarkdown = [{ type: "header" as const, key: "accept", value: ".*text/markdown.*" }];
 
 const nextConfig: NextConfig = {

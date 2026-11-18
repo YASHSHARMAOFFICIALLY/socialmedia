@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { apiUrl } from "@/lib/site";
 import { LogoMark } from "../sections/site-header";
 
@@ -12,6 +12,9 @@ import { LogoMark } from "../sections/site-header";
 //   signup: username + email + password    (POST /sign-up/email, username plugin)
 //   Google: POST /sign-in/social returns Google's consent URL, then the browser goes there.
 type Mode = "login" | "signup";
+type Provider = "google" | "microsoft"; // Microsoft = Outlook, Hotmail, Live and work/school accounts
+const PROVIDER_NAME: Record<Provider, string> = { google: "Google", microsoft: "Microsoft" };
+const socialButton = "inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-line bg-white text-sm font-semibold text-ink transition-colors hover:border-ink disabled:opacity-60";
 const AFTER_AUTH = "/"; // ponytail: no signed-in app in this frontend yet; send people home
 
 async function post(path: string, body: unknown) {
@@ -35,12 +38,25 @@ function message(status: number, mode: Mode, code?: string) {
   return "Something went wrong. Try again.";
 }
 
+// Google/Microsoft sign-in failures come back as ?error=<code> on this page (Better Auth errorCallbackURL).
+function oauthMessage(code: string) {
+  if (code === "account_not_linked") return "That email already has a PostRally account. Log in with your password below. Never got our verification email? Check your junk folder.";
+  if (code === "access_denied") return "Sign-in was cancelled. Try again whenever you're ready.";
+  if (code === "email_not_found") return "Your account has no email address we can use. Sign up with your email and a password instead.";
+  if (/state|restart/i.test(code)) return "Sign-in took too long or was opened in another tab. Try again.";
+  return "We couldn't sign you in that way. Try again, or use your email and password.";
+}
+const noSubscribe = () => () => {};
+const readOauthError = () => new URLSearchParams(window.location.search).get("error");
+
 const field = "mt-2 block w-full rounded-xl border border-line bg-white px-3.5 py-3 text-base text-ink placeholder:text-muted/70 focus-visible:border-ink";
 const label = "block text-sm font-medium text-ink";
 
 export function AuthForm({ mode }: { mode: Mode }) {
-  const [busy, setBusy] = useState<"form" | "google" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"form" | Provider | null>(null);
+  const [formError, setError] = useState<string | null>(null);
+  const oauthError = useSyncExternalStore(noSubscribe, readOauthError, () => null);
+  const error = formError ?? (oauthError && busy === null ? oauthMessage(oauthError) : null);
   const [notice, setNotice] = useState<string | null>(null);
   const signup = mode === "signup";
   const router = useRouter();
@@ -71,12 +87,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
     }
   }
 
-  async function google() {
-    setBusy("google");
+  async function social(provider: Provider) {
+    setBusy(provider);
     setError(null);
     try {
-      const res = await post("/sign-in/social", { provider: "google", callbackURL: `${window.location.origin}${AFTER_AUTH}`, errorCallbackURL: window.location.href });
-      if (res.status >= 400 || !res.data?.url) return setError("Google sign-in isn't available right now. Use your email or username instead.");
+      const { origin, pathname } = window.location;
+      const res = await post("/sign-in/social", { provider, callbackURL: `${origin}${AFTER_AUTH}`, errorCallbackURL: `${origin}${pathname}` });
+      if (res.status >= 400 || !res.data?.url) return setError(`${PROVIDER_NAME[provider]} sign-in isn't available right now. Use your email or username instead.`);
       window.location.assign(res.data.url);
     } catch {
       setError("Can't reach PostRally right now. Check your connection and try again.");
@@ -102,12 +119,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       <h1 className="font-heading text-heading text-ink">{signup ? "Create your account" : "Welcome back"}</h1>
       <p className="mt-3 text-base text-muted">{signup ? "Write once, post everywhere. It takes a minute." : "Log in to schedule, publish and check your posts."}</p>
 
-      <button
-        type="button"
-        onClick={google}
-        disabled={busy !== null}
-        className="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-line bg-white text-sm font-semibold text-ink transition-colors hover:border-ink disabled:opacity-60"
-      >
+      <button type="button" onClick={() => social("google")} disabled={busy !== null} className={`mt-8 ${socialButton}`}>
         <svg aria-hidden viewBox="0 0 24 24" className="size-5">
           <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z" />
           <path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.1-4 1.1-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24Z" />
@@ -115,6 +127,15 @@ export function AuthForm({ mode }: { mode: Mode }) {
           <path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A11.9 11.9 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8Z" />
         </svg>
         {busy === "google" ? "Opening Google…" : "Continue with Google"}
+      </button>
+      <button type="button" onClick={() => social("microsoft")} disabled={busy !== null} className={`mt-3 ${socialButton}`}>
+        <svg aria-hidden viewBox="0 0 24 24" className="size-5">
+          <path fill="#F25022" d="M1 1h10.5v10.5H1z" />
+          <path fill="#7FBA00" d="M12.5 1H23v10.5H12.5z" />
+          <path fill="#00A4EF" d="M1 12.5h10.5V23H1z" />
+          <path fill="#FFB900" d="M12.5 12.5H23V23H12.5z" />
+        </svg>
+        {busy === "microsoft" ? "Opening Microsoft…" : "Continue with Microsoft"}
       </button>
 
       <div className="my-7 flex items-center gap-4 text-xs text-muted">

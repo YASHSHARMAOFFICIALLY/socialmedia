@@ -1,6 +1,7 @@
 import Link from "next/link";
 import "./landing.css";
-import type { SeoPage } from "./seo-pages";
+import { channelFaqs, channels, integrationFaqs, integrations, related, type SeoPage } from "./seo-pages";
+import { AskAiRow, PageFaq, RelatedPages } from "./components/page-extras";
 import { SiteHeader } from "./sections/site-header";
 import { SiteFooter } from "./sections/site-footer";
 import { gutter } from "./components/layout";
@@ -14,6 +15,9 @@ import { demos } from "./stageshow/assistant-demos";
 export function SeoPageView({ page, kind }: { page: SeoPage; kind: "Integration" | "Network" }) {
   const demo = kind === "Integration" && page.slug in demos;
   const logo = networkLogos[page.name] ?? assistantLogos[page.name as keyof typeof assistantLogos];
+  const integration = kind === "Integration";
+  const base = integration ? "/integrations" : "/channels";
+  const path = `${base}/${page.slug}`;
   return (
     <div className="landing relative flex-1 bg-paper font-sans text-ink">
       <SiteHeader solid />
@@ -30,6 +34,7 @@ export function SeoPageView({ page, kind }: { page: SeoPage; kind: "Integration"
           <div>
             <h1 className="max-w-3xl font-heading text-heading text-ink">{page.title}</h1>
             <p className="mt-6 max-w-2xl text-lg text-muted">{page.description}</p>
+            <AskAiRow path={path} title={page.title} className="mt-8" />
             <div className="mt-8 flex flex-wrap gap-3">
               {demo && (
                 <Link href="/signup" className="inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink/85">
@@ -70,6 +75,9 @@ export function SeoPageView({ page, kind }: { page: SeoPage; kind: "Integration"
         <Link href="/#assistants" className="mt-16 inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink/85">
           Try it on the home page
         </Link>
+
+        <RelatedPages links={related(integration ? integrations : channels, page.slug).map((p) => ({ href: `${base}/${p.slug}`, label: p.title }))} />
+        <PageFaq items={integration ? integrationFaqs(page) : channelFaqs(page)} path={path} title={page.title} />
       </main>
       <SiteFooter />
     </div>

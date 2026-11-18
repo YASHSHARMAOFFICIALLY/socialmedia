@@ -55,7 +55,7 @@ export function Hero() {
                 key={line}
                 className={
                   i === 0
-                    ? "block font-sans text-[clamp(1.8rem,1rem+5vw,5.25rem)] leading-[1.02] font-bold tracking-[-0.04em]"
+                    ? "block font-sans text-[clamp(1.8rem,1rem+4vw,4.5rem)] leading-[1.02] font-bold tracking-[-0.04em]"
                     : "block font-heading text-[clamp(2.3rem,1.2rem+5.8vw,6rem)] leading-[1] italic"
                 }
               >
@@ -80,7 +80,7 @@ export function Hero() {
               href="/signup"
               className="inline-flex min-h-13 items-center rounded-full bg-ink px-7 text-base font-semibold text-white shadow-[0_12px_32px_rgb(4_40_90/0.35)] transition-transform duration-200 ease-out hover:-translate-y-0.5"
             >
-              Create your account
+              {hero.signup}
             </Link>
             <a
               href={hero.primary.href}

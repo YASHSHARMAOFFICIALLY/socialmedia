@@ -7,9 +7,11 @@ import { Heading, Section } from "../components/layout";
 export function Demo() {
   return (
     <Section id={demo.id} className="py-16 sm:py-24">
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-end lg:gap-16">
+      <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
         <Heading id={`${demo.id}-title`} title={demo.title} accent={demo.titleAccent} />
-        <p className="max-w-xl text-lg text-muted">{demo.body}</p>
+        <div>
+          <p className="max-w-xl text-lg text-muted">{demo.body}</p>
+        </div>
       </div>
     </Section>
   );

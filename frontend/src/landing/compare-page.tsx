@@ -1,6 +1,7 @@
 import "./landing.css";
 import Link from "next/link";
-import { comparedOn, type ComparePage } from "./seo-pages";
+import { compareFaqs, comparedOn, comparisons, related, type ComparePage } from "./seo-pages";
+import { AskAiRow, BottomLine, PageFaq, RelatedPages } from "./components/page-extras";
 import { SiteHeader } from "./sections/site-header";
 import { SiteFooter } from "./sections/site-footer";
 import { gutter } from "./components/layout";
@@ -10,6 +11,7 @@ import { compareDemo } from "./stageshow/assistant-demos";
 // /vs/<slug>: a side-by-side table, where the other tool is stronger, where PostRally differs, and the
 // sources with the date they were checked. Same white page, header and footer as the rest of the site.
 export function ComparePageView({ page }: { page: ComparePage }) {
+  const path = `/vs/${page.slug}`;
   return (
     <div className="landing relative flex-1 bg-white font-sans text-ink">
       <SiteHeader solid />
@@ -19,6 +21,7 @@ export function ComparePageView({ page }: { page: ComparePage }) {
           <div>
             <h1 className="font-heading text-heading text-ink">{page.title}</h1>
             <p className="mt-6 max-w-2xl text-lg text-muted">{page.description}</p>
+            <AskAiRow path={path} title={page.title} className="mt-8" />
             <Link href="/signup" className="mt-8 inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink/85">
               Try PostRally
             </Link>
@@ -57,21 +60,9 @@ export function ComparePageView({ page }: { page: ComparePage }) {
         </div>
 
         <div className="mt-16 grid gap-12 md:grid-cols-2">
-          <section aria-labelledby="stronger">
-            <h2 id="stronger" className="text-xl font-semibold text-ink">
-              Where {page.name} is stronger
-            </h2>
-            <ul className="mt-5 divide-y divide-line border-y border-line">
-              {page.theyAreStronger.map((p) => (
-                <li key={p} className="py-4 text-base text-ink">
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </section>
           <section aria-labelledby="different">
             <h2 id="different" className="text-xl font-semibold text-ink">
-              Where PostRally is different
+              Why people pick PostRally over {page.name}
             </h2>
             <ul className="mt-5 divide-y divide-line border-y border-line">
               {page.postrallyIsDifferent.map((p) => (
@@ -81,7 +72,25 @@ export function ComparePageView({ page }: { page: ComparePage }) {
               ))}
             </ul>
           </section>
+          <section aria-labelledby="stronger">
+            <h2 id="stronger" className="text-xl font-semibold text-muted">
+              When {page.name} still fits
+            </h2>
+            <ul className="mt-5 divide-y divide-line border-y border-line">
+              {page.theyAreStronger.map((p) => (
+                <li key={p} className="py-4 text-base text-muted">
+                  {p}
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
+
+        <BottomLine text={page.bottomLine}>
+          <Link href="/#assistants" className="mt-8 inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink/85">
+            Try PostRally on the home page
+          </Link>
+        </BottomLine>
 
         <section aria-labelledby="sources" className="mt-16 max-w-2xl">
           <h2 id="sources" className="text-base font-semibold text-ink">
@@ -100,9 +109,8 @@ export function ComparePageView({ page }: { page: ComparePage }) {
           </ul>
         </section>
 
-        <Link href="/#assistants" className="mt-16 inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink/85">
-          Try PostRally on the home page
-        </Link>
+        <RelatedPages links={related(comparisons, page.slug).map((p) => ({ href: `/vs/${p.slug}`, label: p.title }))} />
+        <PageFaq items={compareFaqs(page)} path={path} title={page.title} />
       </main>
       <SiteFooter />
     </div>

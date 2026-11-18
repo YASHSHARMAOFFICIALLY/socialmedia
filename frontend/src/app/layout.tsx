@@ -13,9 +13,9 @@ const code = Geist_Mono({ variable: "--font-code", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "PostRally: write once, post to eleven social networks",
+  title: "PostRally: social media scheduler, write once and post to eleven networks",
   description:
-    "Tailor one post for Instagram, X, LinkedIn, YouTube, Threads, Facebook, Pinterest, TikTok, Bluesky, Mastodon and Telegram. Schedule it in any timezone, track how it did, and run it all from Claude, ChatGPT, Cursor or the API.",
+    "PostRally is a social media scheduler. Tailor one post for Instagram, X, LinkedIn, YouTube, Threads, Facebook, Pinterest, TikTok, Bluesky, Mastodon and Telegram. Schedule it in any timezone, track how it did, and run it all from Claude, ChatGPT, Cursor or the API.",
   other: { "ai-summary": "PostRally is a social media scheduler: write one post, tailor it for 11 networks, schedule it in any timezone, track results, and run it from Claude, ChatGPT or Cursor. Markdown of every page: /llms-full.txt" },
 };
 

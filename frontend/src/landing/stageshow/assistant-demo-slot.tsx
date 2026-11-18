@@ -8,9 +8,9 @@ import type { Demo as DemoData } from "./assistant-demos";
 const Demo = dynamic(() => import("./assistant-demo").then((m) => m.AssistantDemo), { ssr: false });
 
 export function AssistantDemoSlot({ slug, demo, caption }: { slug?: string; demo?: DemoData; caption: string }) {
-  const ratio = slug === "api" ? "aspect-[760/300] max-[639px]:aspect-[358/300]" : "aspect-[760/440] max-[639px]:aspect-[358/560]";
+  const ratio = slug === "api" ? "aspect-[760/300] @max-[639px]:aspect-[358/300]" : "aspect-[760/440] @max-[639px]:aspect-[358/560]";
   return (
-    <figure className="m-0">
+    <figure className="@container m-0">
       {/* A picture of the product, not a control: hidden from assistive tech and out of the tab order. */}
       <div aria-hidden inert className={ratio}>
         <Demo slug={slug} demo={demo} />

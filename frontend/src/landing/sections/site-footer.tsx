@@ -9,7 +9,6 @@ import { BrandGlyph as Glyph } from "../components/brand-glyph";
 // Three bands: brand and "Ask AI about PostRally" across the top, five even link columns, then a
 // large quiet wordmark that closes the page. Every link opens a real page or section: the AI and network columns go to one
 // static page each (seo-pages.ts), which is what makes the footer an internal-link hub.
-// A Guides column gets added when those pages exist; no dead links before that.
 const linkClass =
   "inline-flex min-h-9 items-center gap-2.5 text-sm text-muted transition-colors hover:text-ink";
 
@@ -143,17 +142,16 @@ export function SiteFooter() {
             ))}
           </Column>
 
-          <Column title="For AI and search">
-            <li>
-              <a href="/llms.txt" className={linkClass}>
-                llms.txt
-              </a>
-            </li>
-            <li>
-              <a href="/sitemap.xml" className={linkClass}>
-                Sitemap
-              </a>
-            </li>
+          {/* Ribbon's GUIDES column: every guide page by its search title. "Use it from" opens the
+              products' own sites, so this is where those pages get their internal links. */}
+          <Column title="Guides" id="guides">
+            {integrations.map((p) => (
+              <li key={p.slug}>
+                <Link href={`/integrations/${p.slug}`} className={linkClass}>
+                  {p.title.replace("Schedule social media posts from", "Post from")}
+                </Link>
+              </li>
+            ))}
           </Column>
         </div>
       </div>
@@ -162,12 +160,12 @@ export function SiteFooter() {
           className={`${gutter} flex flex-col gap-2 py-6 text-xs text-muted sm:flex-row sm:justify-between`}
         >
           <p>
-            © {year} {productName}. Prices are coming soon; meanwhile,{" "}
+            © {year} {productName}. Start free, or{" "}
             <Link
-              href="/#assistants"
+              href="/pricing"
               className="font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink"
             >
-              try every part of it
+              try any paid plan for 7 days
             </Link>
             .
           </p>
@@ -182,6 +180,12 @@ export function SiteFooter() {
             <Link href="/terms" className="inline-flex min-h-9 items-center hover:text-ink">
               Terms
             </Link>
+            <a href="/llms.txt" className="inline-flex min-h-9 items-center hover:text-ink">
+              llms.txt
+            </a>
+            <a href="/sitemap.xml" className="inline-flex min-h-9 items-center hover:text-ink">
+              Sitemap
+            </a>
           </p>
         </div>
       </div>

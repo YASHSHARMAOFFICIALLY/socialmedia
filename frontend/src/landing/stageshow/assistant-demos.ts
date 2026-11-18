@@ -13,6 +13,24 @@ export type Demo = {
   card: { heading: string; rows: { network: string; text: string }[]; button?: string; done?: string };
 };
 
+// The home page's assistant section: the full flow in one exchange (ask, preview with a code, confirm).
+export const landingDemo: Demo = {
+  title: "Claude",
+  q: "Schedule the launch thread for Friday 10:00 on LinkedIn, X and Instagram.",
+  a: "Here is the preview for all three, Friday 10:00 in your timezone. Nothing goes out until you confirm with this code. It expires in ten minutes.",
+  placeholder: "Reply to Claude",
+  card: {
+    heading: "Preview, code K7Q-4MX",
+    rows: [
+      { network: "LinkedIn", text: "Fri 20 Nov, 10:00" },
+      { network: "X", text: "Thread of 4, Fri 20 Nov, 10:00" },
+      { network: "Instagram", text: "Carousel, Fri 20 Nov, 10:00" },
+    ],
+    button: "Confirm and schedule",
+    done: "Scheduled, 3 posts",
+  },
+};
+
 export const demos: Record<string, Demo | "api"> = {
   claude: {
     title: "Claude",

@@ -5,6 +5,7 @@ import { Demo } from "./sections/demo";
 import { Product } from "./sections/product";
 import { Assistants } from "./sections/assistants";
 import { More } from "./sections/more";
+import { Pricing } from "./sections/pricing";
 import { Faq } from "./sections/faq";
 import { Closing } from "./sections/closing";
 import { SiteFooter } from "./sections/site-footer";
@@ -21,6 +22,7 @@ export function LandingPage() {
         <Assistants />
         <Product />
         <More />
+        <Pricing />
         <Faq />
         <Closing />
       </main>

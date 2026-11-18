@@ -61,7 +61,7 @@
 /* Pages without the hero photo: the compact pill from the start, no scroll morph. */
 .site-nav.is-solid {
   animation: none;
-  max-width: 780px;
+  max-width: 920px;
   color: var(--color-ink);
   background-color: rgb(255 255 255 / 0.92);
   box-shadow: 0 0 0 1px var(--color-line), 0 10px 30px rgb(10 40 90 / 0.08);
@@ -83,7 +83,7 @@
 }
 @keyframes nav-compact {
   to {
-    max-width: 780px;
+    max-width: 920px;
     color: var(--color-ink);
     background-color: rgb(255 255 255 / 0.88);
     box-shadow:
@@ -112,7 +112,7 @@
 }
 @supports not (animation-timeline: scroll()) {
   .site-nav {
-    max-width: 780px;
+    max-width: 920px;
     color: var(--color-ink);
     background-color: rgb(255 255 255 / 0.92);
     box-shadow: 0 0 0 1px var(--color-line);
@@ -239,5 +239,18 @@
       animation-timeline: view();
       animation-range: entry 0% entry 35%;
     }
+  }
+}
+
+/* Pricing: a changed price (period or region switch) fades in, 150ms, so the swap reads as a change. */
+@keyframes price-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .price-in {
+    animation: price-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 }

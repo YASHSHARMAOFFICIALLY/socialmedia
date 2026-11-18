@@ -4,6 +4,8 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Workers Logs: server render errors and console output, searchable in the Cloudflare dashboard (same as the backend).
+  "observability": { "enabled": true },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"

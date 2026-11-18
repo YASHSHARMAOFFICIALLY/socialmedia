@@ -189,6 +189,8 @@ export type ComparePage = {
   rows: { label: string; postrally: string; them: string }[];
   theyAreStronger: string[];
   postrallyIsDifferent: string[];
+  /** One-paragraph verdict at the end of the page, built only from the lists above. */
+  bottomLine: string;
   sources: { label: string; url: string }[];
 };
 
@@ -201,7 +203,7 @@ export const comparisons: ComparePage[] = [
     slug: "buffer",
     name: "Buffer",
     title: "PostRally vs Buffer",
-    description: "How PostRally and Buffer differ on pricing model, networks, AI assistant support and analytics, with the sources we checked.",
+    description: "Why PostRally is the Buffer alternative for people who post from Claude or ChatGPT, post to Telegram, and want analytics that don't mix up numbers. Checked side by side, with sources.",
     rows: [
       { label: "Pricing model", postrally: postrallyPrice, them: "Per connected channel, with a free plan for a few channels." },
       { label: "Networks", postrally: postrallyNetworks, them: "Facebook, Instagram, TikTok, YouTube, LinkedIn, Google Business Profile, X, Pinterest, Threads, Bluesky, Mastodon" },
@@ -209,6 +211,7 @@ export const comparisons: ComparePage[] = [
     ],
     theyAreStronger: ["Years in the market and a free plan you can start on today.", "Google Business Profile posting, which PostRally doesn't do.", "Published prices you can plan around."],
     postrallyIsDifferent: ["Telegram channels, which Buffer's network list doesn't include.", "AI assistants can draft and schedule, but never publish without your confirmation code.", "Analytics only adds up numbers that mean the same on every network; views stay per network."],
+    bottomLine: "PostRally is the better pick if AI is part of how you work. Claude or ChatGPT drafts and schedules your posts, and nothing goes out until you confirm. You also get Telegram, and analytics that never add up numbers that mean different things on different networks. Buffer still makes sense if Google Business Profile is a must.",
     sources: [
       { label: "Buffer pricing (official, check current prices)", url: "https://buffer.com/pricing" },
       { label: "SocialPilot: Buffer pricing in 2026", url: "https://www.socialpilot.co/insights/buffer-pricing" },
@@ -219,7 +222,7 @@ export const comparisons: ComparePage[] = [
     slug: "hootsuite",
     name: "Hootsuite",
     title: "PostRally vs Hootsuite",
-    description: "How PostRally and Hootsuite differ on pricing model, networks, AI assistant support and team features, with the sources we checked.",
+    description: "Why growing teams pick PostRally over Hootsuite: one price per workspace instead of per seat, Mastodon and Telegram included, and AI assistants that never publish without you. Checked side by side, with sources.",
     rows: [
       { label: "Pricing model", postrally: postrallyPrice, them: "Per user, paid plans only (trial available)." },
       { label: "Networks", postrally: postrallyNetworks, them: "Instagram, Facebook, X, LinkedIn, TikTok, YouTube, Pinterest, Threads, Bluesky, WhatsApp" },
@@ -227,6 +230,7 @@ export const comparisons: ComparePage[] = [
     ],
     theyAreStronger: ["Social listening across many sites, which PostRally doesn't have.", "WhatsApp, which PostRally doesn't post to.", "Enterprise sales, support and compliance programs."],
     postrallyIsDifferent: ["Priced per workspace, not per user, so adding a teammate doesn't change the plan.", "Mastodon and Telegram, which aren't in Hootsuite's listed publishing networks.", "Approval flow where editing an approved post sends it back for review."],
+    bottomLine: "PostRally is the better pick for a growing team. You pay per workspace, so a new teammate doesn't raise the bill, and editing an approved post sends it back for review automatically. Mastodon and Telegram are included. Hootsuite still makes sense if you need social listening or WhatsApp.",
     sources: [
       { label: "Hootsuite pricing (official, check current prices)", url: "https://www.hootsuite.com/plans" },
       { label: "SocialPilot: Hootsuite pricing in 2026", url: "https://www.socialpilot.co/?p=715189" },
@@ -237,7 +241,7 @@ export const comparisons: ComparePage[] = [
     slug: "later",
     name: "Later",
     title: "PostRally vs Later",
-    description: "How PostRally and Later differ on pricing model, networks and auto-publishing, with the sources we checked.",
+    description: "Why PostRally beats Later if you post beyond Instagram: all 11 networks publish on their own, with no phone reminders, plus an API and webhooks. Checked side by side, with sources.",
     rows: [
       { label: "Pricing model", postrally: postrallyPrice, them: "Per social set, with users and AI credits as add-ons." },
       { label: "Auto-publishing", postrally: "All 11 networks publish automatically.", them: "Instagram, Facebook, TikTok, Pinterest and LinkedIn auto-publish; other networks send a reminder to post by hand." },
@@ -245,6 +249,7 @@ export const comparisons: ComparePage[] = [
     ],
     theyAreStronger: ["Visual Instagram planning and a long track record with creators.", "Snapchat, which PostRally doesn't support."],
     postrallyIsDifferent: ["Every supported network publishes on its own; no phone reminders.", "Threads, Bluesky, Mastodon and Telegram alongside the big networks.", "A REST API and signed webhooks for your own tools."],
+    bottomLine: "PostRally is the better pick if you post to more than Instagram. Every one of its 11 networks publishes on its own, including Threads, Bluesky, Mastodon and Telegram, so you never get a phone reminder to post by hand. Developers get a REST API and signed webhooks. Later still makes sense if Snapchat matters to you.",
     sources: [
       { label: "Later pricing (official, check current prices)", url: "https://later.com/pricing/" },
       { label: "Fastlancer: Later review 2026", url: "https://www.fastlancer.org/en/fastlancer-blog/later-review/" },
@@ -255,7 +260,7 @@ export const comparisons: ComparePage[] = [
     slug: "postiz",
     name: "Postiz",
     title: "PostRally vs Postiz",
-    description: "How PostRally and Postiz differ on licence, hosting, networks and how AI assistants publish, with the sources we checked.",
+    description: "Why PostRally is the safer Postiz alternative: nothing to host, and an AI assistant can't publish anything until you confirm the preview. Checked side by side, with sources.",
     rows: [
       { label: "Licence and hosting", postrally: "Hosted service.", them: "Open source (AGPL-3.0); self-host it or use their cloud." },
       { label: "Networks", postrally: postrallyNetworks, them: "30+ including Reddit, Discord and Slack" },
@@ -263,6 +268,7 @@ export const comparisons: ComparePage[] = [
     ],
     theyAreStronger: ["Open source: you can read the code and run it on your own server.", "Far more networks, including Reddit, Discord and Slack.", "A large community (40,000+ GitHub stars)."],
     postrallyIsDifferent: ["Publishing from an AI assistant needs a confirmation code from the preview; asking twice never posts twice.", "Analytics that won't add views across networks, because each network counts them differently.", "Nothing to host or update yourself."],
+    bottomLine: "PostRally is the better pick if you want to post, not run servers. There's nothing to install or update, and an AI assistant can't publish anything until you confirm the preview. Asking twice never posts twice. Postiz still makes sense if you need to self-host or post to Reddit, Discord or Slack.",
     sources: [
       { label: "Postiz on GitHub (licence, stars)", url: "https://github.com/gitroomhq/postiz-app" },
       { label: "Postiz: OpenClaw page (platform list)", url: "https://postiz.com/openclaw" },
@@ -270,3 +276,44 @@ export const comparisons: ComparePage[] = [
     ],
   },
 ];
+
+// Per-page FAQs (Ribbon guides). Built from the facts above, so a page can't claim more than its own data.
+export type Faq = { q: string; a: string };
+
+const pricingFaq: Faq = { q: "How much does PostRally cost?", a: "PostRally is priced per workspace, so adding a teammate doesn't change the plan. Prices aren't published yet." };
+const noAutoPublish = "No. You see a preview first, and publishing needs the confirmation code from that preview. The code expires after ten minutes, and asking twice never posts twice.";
+
+export function integrationFaqs(p: SeoPage): Faq[] {
+  return [
+    p.steps ? { q: `How do I connect ${p.name} to PostRally?`, a: p.steps.join(" ") } : { q: `What can I do with the ${p.name}?`, a: p.points.join(" ") },
+    ...(p.slug === "api" ? [] : [{ q: `Can ${p.name} publish a post without asking me?`, a: noAutoPublish }]),
+    { q: `Which networks can I post to from ${p.name}?`, a: `All eleven that PostRally supports: ${postrallyNetworks}.` },
+    pricingFaq,
+  ];
+}
+
+export function channelFaqs(p: SeoPage): Faq[] {
+  return [
+    { q: `Does PostRally publish to ${p.name} on its own?`, a: `Yes. A scheduled ${p.name} post goes out at the time you set, in your timezone. There's no reminder to post it by hand.` },
+    { q: `What can I schedule on ${p.name}?`, a: p.points.join(" ") },
+    { q: `Can I send the same post to ${p.name} and my other networks?`, a: `Yes. Write it once, then change the caption, media or hashtags for each account. Each version is checked against that network's limits before it goes out.` },
+    { q: `Can Claude or ChatGPT post to ${p.name} for me?`, a: `They can draft and schedule it. ${noAutoPublish}` },
+    pricingFaq,
+  ];
+}
+
+export function compareFaqs(p: ComparePage): Faq[] {
+  const price = p.rows.find((r) => r.label === "Pricing model");
+  return [
+    { q: `Why switch from ${p.name} to PostRally?`, a: p.postrallyIsDifferent.join(" ") },
+    { q: "Can I use PostRally from Claude or ChatGPT?", a: postrallyAi },
+    price ? { q: `How are PostRally and ${p.name} priced?`, a: `PostRally: ${price.postrally} ${p.name}: ${price.them} We list pricing models, not prices, because they change often.` } : pricingFaq,
+    { q: `When is ${p.name} the better fit?`, a: p.theyAreStronger.join(" ") },
+  ];
+}
+
+/** The next `n` pages after `slug` in the same list, wrapping around, so every page gets the same number of inbound links. */
+export function related<T extends { slug: string }>(list: readonly T[], slug: string, n = 3): T[] {
+  const i = list.findIndex((p) => p.slug === slug);
+  return Array.from({ length: Math.min(n, list.length - 1) }, (_, k) => list[(i + 1 + k) % list.length]);
+}

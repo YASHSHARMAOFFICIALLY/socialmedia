@@ -14,10 +14,10 @@ export function Product() {
         Product
       </h2>
       <div className="space-y-24 sm:space-y-32">
-        <Split eyebrow={calendar.eyebrow} title={calendar.title} accent={calendar.titleAccent} points={calendar.points}>
+        <Split eyebrow={calendar.eyebrow} title={calendar.title} accent={calendar.titleAccent} body={calendar.body}>
           <CalendarDemoSlot />
         </Split>
-        <Split flip eyebrow={analytics.eyebrow} title={analytics.title} accent={analytics.titleAccent} points={analytics.points}>
+        <Split flip eyebrow={analytics.eyebrow} title={analytics.title} accent={analytics.titleAccent} body={analytics.body}>
           <AnalyticsDemoSlot />
         </Split>
       </div>
@@ -29,12 +29,12 @@ type SplitProps = {
   eyebrow: string;
   title: string;
   accent: string;
-  points: readonly string[];
+  body: string;
   flip?: boolean;
   children: ReactNode;
 };
 
-function Split({ eyebrow, title, accent, points, flip = false, children }: SplitProps) {
+function Split({ eyebrow, title, accent, body, flip = false, children }: SplitProps) {
   return (
     <div className={cn("grid items-center gap-12 lg:gap-16", flip ? "lg:grid-cols-[3fr_2fr]" : "lg:grid-cols-[2fr_3fr]")}>
       <div className={cn(flip && "lg:order-2")}>
@@ -45,13 +45,7 @@ function Split({ eyebrow, title, accent, points, flip = false, children }: Split
         <div className="mt-3">
           <Heading title={title} accent={accent} />
         </div>
-        <ul className="mt-8 divide-y divide-line border-y border-line">
-          {points.map((p) => (
-            <li key={p} className="py-4 text-base text-muted">
-              {p}
-            </li>
-          ))}
-        </ul>
+        <p className="mt-6 max-w-xl text-lg text-muted">{body}</p>
       </div>
       <div className="min-w-0">{children}</div>
     </div>
