@@ -33,7 +33,8 @@ export function createBillingPayments(deps: { db: Db; workspaces: WorkspaceServi
       ps = await p.getSubscription(providerSubId);          // re-read UNDER the row lock so a slower, older event cannot overwrite newer state
       // The customer must have bought a product we priced. The provider's product decides the plan (this also covers stale checkout tabs and plan
       // changes made in the portal); a product that is none of our prices is never granted.
-      const bought = (await q.query<{ plan_version_id: string; currency: string; interval: string }>("SELECT plan_version_id, currency, interval FROM billing_prices WHERE provider_refs->>$1 = $2 ORDER BY plan_version_id = $3 DESC LIMIT 1", [p.name, ps.productId, sub.plan_version_id])).rows[0];
+      // One Dodo product carries both the USD price and the India INR price, so both of our rows point at it: the currency Dodo charged picks the row.
+      const bought = (await q.query<{ plan_version_id: string; currency: string; interval: string }>("SELECT plan_version_id, currency, interval FROM billing_prices WHERE provider_refs->>$1 = $2 ORDER BY plan_version_id = $3 DESC, currency = upper($4) DESC LIMIT 1", [p.name, ps.productId, sub.plan_version_id, ps.currency])).rows[0];
       if (!bought) return unmapped("provider product matches no plan price");
       const planChanged = bought.plan_version_id !== sub.plan_version_id || bought.currency !== sub.currency || bought.interval !== sub.interval;
       const event = EVENT_FOR[ps.status];

@@ -78,8 +78,14 @@ export const publishTools = [
       if (prev) return { ...(prev.response as object), replayed: true };
       if (Date.now() > exp) throw new AppError(409, "CONFIRMATION_STALE", "The confirmation expired. Call prepare_publish again and confirm with the user.");
       if (fp !== s.fingerprint) throw new AppError(409, "CONFIRMATION_STALE", "The post changed after the preview. Call prepare_publish again and confirm the new preview with the user.");
+      // Free plan: 10 AI-published posts a month. Plans without the row are uncapped.
+      // ponytail: check-then-record, so two parallel calls at 9/10 can both pass (11 max); lock the workspace row if that ever matters.
+      const cap = await c.deps.billing.check(c.workspaceId, "mcp_posts_per_month");
+      if (cap.reason === "limit_reached") throw new AppError(402, "PLAN_LIMIT_REACHED", "Your plan's AI posts for this month are used up. Upgrade to keep publishing from your assistant.", { feature: cap.feature, limit: cap.limit, used: cap.used, plan: cap.plan });
       const opts = { accountIds: a.accountIds, idempotencyKey: key, ...(s.when ? { schedule: { at: s.when.at, timezone: s.when.timezone } } : {}) };
-      return c.deps.publishing.publish(c.actor, c.workspaceId, a.postId, opts);
+      const out = await c.deps.publishing.publish(c.actor, c.workspaceId, a.postId, opts);
+      if (cap.limit !== null && cap.reason !== "not_in_plan") await c.deps.billing.recordUsage(c.workspaceId, "mcp_posts_per_month", 1, key);
+      return out;
     },
   }),
 ];

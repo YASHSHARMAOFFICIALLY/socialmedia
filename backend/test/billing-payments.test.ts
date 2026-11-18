@@ -38,7 +38,7 @@ describe("billing payments (Dodo adapter, mocked HTTP)", async () => {
     const body = o.body ?? JSON.stringify({ business_id: "b", type, timestamp: new Date().toISOString(), data });
     return request(t.app).post("/webhooks/dodo").set("content-type", "application/json").set("webhook-id", id).set("webhook-timestamp", String(ts)).set("webhook-signature", o.sig ?? sign(id, ts, body)).send(body);
   };
-  const setRef = (plan = "pro", ref = "pdt_pro") => t.db.query("UPDATE billing_prices SET provider_refs = jsonb_build_object('dodo', $2::text) WHERE plan_version_id IN (SELECT v.id FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = $1) AND currency = 'INR' AND interval = 'month'", [plan, ref]).catch(() => null);
+  const setRef = (plan = "pro", ref = "pdt_pro") => t.db.query("UPDATE billing_prices SET provider_refs = jsonb_build_object('dodo', $2::text) WHERE plan_version_id IN (SELECT v.id FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = $1) AND currency = 'INR' AND interval = 'month'", [plan, ref]).catch(() => null);
 
   it("rejects unsigned, mis-signed, tampered and stale webhooks and stores nothing", async () => {
     const before = (await t.db.query("SELECT 1 FROM billing_webhook_events")).rowCount;

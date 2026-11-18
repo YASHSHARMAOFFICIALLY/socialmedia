@@ -6,7 +6,7 @@ import { world, type T } from "./helpers/world.js";
 
 const sub = (t: T, ws: string, plan: string, status: SubStatus, extra = "") =>
   t.db.query(`INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval ${extra ? ", provider, provider_subscription_id" : ""})
-    SELECT $1, v.id, $3, 'INR', 'month' ${extra ? ", 'dodo', $4" : ""} FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = $2`, extra ? [ws, plan, status, extra] : [ws, plan, status]);
+    SELECT $1, v.id, $3, 'INR', 'month' ${extra ? ", 'dodo', $4" : ""} FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = $2`, extra ? [ws, plan, status, extra] : [ws, plan, status]);
 
 describe("billing foundation", async () => {
   const t = await createTestApp([createFakeAdapter("linkedin", () => ok()).adapter]);
@@ -28,6 +28,13 @@ describe("billing foundation", async () => {
     expect(plans.map((p) => p.key)).toEqual(["free", "starter", "pro", "agency"]);
     for (const p of plans) for (const pr of p.prices) expect(Number.isInteger(pr.amountMinor)).toBe(true);
     expect(plans.find((p) => p.key === "free")!.prices).toEqual([]);
+    // Every paid plan sells monthly and yearly, in USD (international) and INR (India); yearly = 10 months.
+    for (const p of plans.filter((x) => x.key !== "free")) {
+      const pr = p.prices as { currency: string; interval: string; amountMinor: number }[];
+      expect(pr.map((x) => `${x.currency}/${x.interval}`).sort(), p.key).toEqual(["INR/month", "INR/year", "USD/month", "USD/year"]);
+      for (const cur of ["INR", "USD"]) expect(pr.find((x) => x.currency === cur && x.interval === "year")!.amountMinor, `${p.key} ${cur}`).toBe(pr.find((x) => x.currency === cur && x.interval === "month")!.amountMinor * 10);
+    }
+    expect(plans.find((p) => p.key === "starter")!.prices).toContainEqual({ currency: "USD", interval: "month", amountMinor: 1500 });
     await expect(t.db.query("UPDATE billing_prices SET amount_minor = 1")).rejects.toThrow(/immutable/);
     await t.db.query("UPDATE billing_prices SET provider_refs = '{\"dodo\":\"x\"}'");   // mapping is allowed
     await expect(t.db.query("UPDATE billing_entitlements SET limit_value = 1")).rejects.toThrow(/immutable/);
@@ -62,12 +69,14 @@ describe("billing foundation", async () => {
     expect((await billing.check(ws, "seats")).plan).toBe("free");
   });
 
-  it("flags and unknown features: free has no MCP; unknown feature is denied", async () => {
+  it("flags and unknown features: free has MCP capped at 10 AI posts a month, paid plans are uncapped; unknown feature is denied", async () => {
     const { ws } = await world(t, ["linkedin"]);
-    expect(await billing.check(ws, "mcp_access")).toMatchObject({ allowed: false, reason: "not_in_plan" });
+    expect((await billing.check(ws, "mcp_access")).allowed).toBe(true);
+    expect(await billing.check(ws, "mcp_posts_per_month")).toMatchObject({ allowed: true, limit: 10, used: 0 });
     expect((await billing.check(ws, "no_such_feature")).allowed).toBe(false);
     await sub(t, ws, "starter", "active");
     expect((await billing.check(ws, "mcp_access")).allowed).toBe(true);
+    expect((await billing.check(ws, "mcp_posts_per_month")).reason).toBe("not_in_plan");   // no row = no AI-post cap (publish_post treats it as unlimited)
   });
 
   it("usage is idempotent per key and gates at the monthly limit", async () => {

@@ -149,7 +149,7 @@ describe("workspace deletion", async () => {
 
   it("refuses while a paid subscription is live", async () => {
     const { owner, ws } = await world(t, ["linkedin"]);
-    await t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'pro'", [ws]);
+    await t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = 'pro'", [ws]);
     const name = (await owner.agent.get(`/workspaces/${ws}`)).body.data.name as string;
     const r = await owner.agent.delete(`/workspaces/${ws}`).send({ confirmName: name });
     expect(r.status).toBe(409);

@@ -9,7 +9,7 @@ import { world, type T } from "./helpers/world.js";
 describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
   const t = await createTestApp([createFakeAdapter("x", () => ok()).adapter]);
   afterAll(t.close);
-  const upgrade = (ws: string) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'pro'", [ws]);
+  const upgrade = (ws: string) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = 'pro'", [ws]);
   const rpc = (token: string | null, body: object = { jsonrpc: "2.0", id: 1, method: "tools/list" }, extra: Record<string, string> = {}) => {
     const r = request(t.app).post("/mcp").set("content-type", "application/json").set("accept", "application/json, text/event-stream");
     if (token) r.set("authorization", `Bearer ${token}`);

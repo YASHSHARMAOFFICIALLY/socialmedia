@@ -83,7 +83,7 @@ describe("CLI: bridge to the real server", async () => {
 
   async function pat() {
     const { owner, ws } = await world(t, ["x"]);
-    await t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'pro'", [ws]);
+    await t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = 'pro'", [ws]);
     return (await owner.agent.post(`/workspaces/${ws}/mcp/tokens`).send({ name: "cli" })).body.data.token as string;
   }
 

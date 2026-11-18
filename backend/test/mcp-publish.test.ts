@@ -23,7 +23,7 @@ describe("MCP publishing: prepare_publish -> user confirms -> publish_post", asy
   }
   const principal = (u: U, scopes: string[] = [...SCOPES]): Principal => ({ userId: u.id, email: `${u.id}@t.test`, scopes });
   const call = async (c: Client, name: string, args: object = {}) => { const r = await c.callTool({ name, arguments: args }); return { isError: r.isError === true, data: r.structuredContent as Record<string, any> }; };
-  const upgrade = (ws: string) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = 'pro'", [ws]);
+  const upgrade = (ws: string) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = 'pro'", [ws]);
   const setup = async () => { const w = await world(t, ["x"]); await upgrade(w.ws); return { ...w, c: await connect(principal(w.owner)) }; };
 
   it("annotations: prepare_publish is read-only; publish_post is destructive and open-world so hosts ask the user", async () => {
@@ -80,6 +80,23 @@ describe("MCP publishing: prepare_publish -> user confirms -> publish_post", asy
     const out = await call(c, "publish_post", { postId: post, scheduledAt: at, timezone: "UTC", confirmationCode: prep.data.confirmationCode });
     expect(out.isError).toBe(false);
     expect((await jobs(t, ws)).map((j) => j.status)).toEqual(["scheduled"]);
+  });
+
+  it("Free plan: AI publishing counts 1 per confirmed publish (replays don't count) and stops at 10 a month", async () => {
+    const w = await world(t, ["x"]);                                   // no upgrade: Free
+    const c = await connect(principal(w.owner));
+    const used = async () => (await t.deps.billing.check(w.ws, "mcp_posts_per_month")).used;
+    const code = (await call(c, "prepare_publish", { postId: w.post })).data.confirmationCode;
+    expect((await call(c, "publish_post", { postId: w.post, confirmationCode: code })).isError).toBe(false);
+    expect(await used()).toBe(1);
+    expect((await call(c, "publish_post", { postId: w.post, confirmationCode: code })).data.replayed).toBe(true);
+    expect(await used()).toBe(1);
+    for (let i = 0; i < 9; i++) await t.deps.billing.recordUsage(w.ws, "mcp_posts_per_month", 1, `seed-${i}`);
+    const other = (await w.owner.agent.post(`/workspaces/${w.ws}/posts`).send({ body: "eleventh", variants: [{ accountId: w.accounts["x"] }] })).body.data.id as string;
+    const code2 = (await call(c, "prepare_publish", { postId: other })).data.confirmationCode;
+    const blocked = await call(c, "publish_post", { postId: other, confirmationCode: code2 });
+    expect(blocked.data.error).toMatchObject({ code: "PLAN_LIMIT_REACHED", details: { feature: "mcp_posts_per_month", limit: 10, plan: "free" } });
+    expect((await jobs(t, w.ws)).length).toBe(1);
   });
 
   it("needs the content:publish scope (not in the default grant)", async () => {

@@ -3,7 +3,7 @@ import { createFakeAdapter, ok } from "./helpers/fake-adapter.js";
 import { createTestApp } from "./helpers/app.js";
 import { drain, publish, seedAccount, world } from "./helpers/world.js";
 
-const upgrade = (t: Awaited<ReturnType<typeof createTestApp>>, ws: string, plan: string) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = $2", [ws, plan]);
+const upgrade = (t: Awaited<ReturnType<typeof createTestApp>>, ws: string, plan: string) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = $2", [ws, plan]);
 const usage = async (t: Awaited<ReturnType<typeof createTestApp>>, ws: string) => (await t.db.query<{ n: number }>("SELECT COALESCE(sum(quantity),0)::int AS n FROM billing_usage_events WHERE workspace_id = $1 AND feature_key = 'posts_per_month'", [ws])).rows[0]!.n;
 
 describe("plan limits on REST (BILLING_ENFORCE=true)", async () => {

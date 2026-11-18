@@ -23,6 +23,21 @@ const dialect = (db: Db) =>
     } as never,
   });
 
+/** Personal Microsoft accounts (Outlook/Hotmail/Live) carry this fixed tenant id. */
+const MS_CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
+
+/**
+ * Personal Microsoft accounts send no email_verified claim, so Better Auth treats their email as unverified and
+ * refuses to sign them in to an existing account with that email ("account not linked"). Microsoft verifies
+ * personal-account emails itself, so trust those. Work/school tenants are left alone: their admins can set any
+ * email claim (nOAuth), so trusting them would allow account takeover.
+ */
+export function microsoftUser(p: { tid?: unknown; email?: unknown; preferred_username?: unknown }) {
+  if (p.tid !== MS_CONSUMER_TENANT) return {};
+  const email = [p.email, p.preferred_username].find((v): v is string => typeof v === "string" && v.includes("@"));
+  return email ? { email, emailVerified: true } : {};
+}
+
 export function createAuth(db: Db, cfg: Config, mailer: Mailer) {
   if (!cfg.BETTER_AUTH_SECRET) throw new Error("BETTER_AUTH_SECRET is required");
   return betterAuth({
@@ -51,7 +66,9 @@ export function createAuth(db: Db, cfg: Config, mailer: Mailer) {
         ? { google: { clientId: cfg.GOOGLE_CLIENT_ID, clientSecret: cfg.GOOGLE_CLIENT_SECRET, prompt: "select_account" as const } }
         : {}),
       ...(cfg.MICROSOFT_CLIENT_ID && cfg.MICROSOFT_CLIENT_SECRET
-        ? { microsoft: { clientId: cfg.MICROSOFT_CLIENT_ID, clientSecret: cfg.MICROSOFT_CLIENT_SECRET, tenantId: "common", prompt: "select_account" as const } }
+        ? { microsoft: { clientId: cfg.MICROSOFT_CLIENT_ID, clientSecret: cfg.MICROSOFT_CLIENT_SECRET, tenantId: "common", prompt: "select_account" as const,
+            // Graph photo fetch adds a round trip to every Microsoft login and often 404s on personal accounts.
+            disableProfilePhoto: true, mapProfileToUser: microsoftUser } }
         : {}),
     },
     plugins: [username()],

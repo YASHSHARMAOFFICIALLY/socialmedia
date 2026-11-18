@@ -26,7 +26,7 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
   }
   const principal = (u: U, o: Partial<Principal> = {}): Principal => ({ userId: u.id, email: `${u.id}@t.test`, scopes: ALL, ...o });
   const call = async (c: Client, name: string, args: object = {}) => { const r = await c.callTool({ name, arguments: args }); return { isError: r.isError === true, data: r.structuredContent as Record<string, any> }; };
-  const upgrade = (ws: string, plan = "pro") => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE p.key = $2", [ws, plan]);
+  const upgrade = (ws: string, plan = "pro") => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = $2", [ws, plan]);
   const seedPublished = async (ws: string, owner: U, account: string) => {
     const post = (await owner.agent.post(`/workspaces/${ws}/posts`).send({ body: "hello", variants: [{ accountId: account }] })).body.data.id as string;
     const v = (await t.db.query<{ id: string }>("SELECT id FROM post_variants WHERE post_id = $1", [post])).rows[0]!.id;
@@ -47,12 +47,10 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
     expect((await c.listPrompts()).prompts.map((p) => p.name).sort()).toEqual(["content-repurposing", "cross-platform-content-analysis", "subscription-usage-review", "weekly-performance-review"]);
   });
 
-  it("entitlements: Free plan cannot use analytics over MCP (PLAN_LIMIT_REACHED) but can read billing; Pro can use both", async () => {
+  it("entitlements: Free plan can use MCP (analytics and billing), so people can try it from Claude; Pro too", async () => {
     const { owner, ws } = await world(t, ["x"]);
     const c = await connect(principal(owner));
-    const blocked = await call(c, "get_analytics_overview");
-    expect(blocked.isError).toBe(true);
-    expect(blocked.data.error).toMatchObject({ code: "PLAN_LIMIT_REACHED", details: { feature: "mcp_access", plan: "free" } });
+    expect((await call(c, "get_analytics_overview")).isError).toBe(false);
     expect((await call(c, "get_current_plan")).data.plan.key).toBe("free");
     expect((await call(c, "get_available_plans")).data.plans.map((p: { key: string }) => p.key)).toEqual(["free", "starter", "pro", "agency"]);
     await upgrade(ws);
@@ -148,7 +146,7 @@ describe("MCP core (tools, resources, prompts) over the real SDK", async () => {
   it("resources and prompts use the same gates and return real data; prompts separate facts from recommendations", async () => {
     const { owner, ws, accounts } = await world(t, ["x"]);
     const free = await connect(principal(owner, { workspaceId: ws }));
-    await expect(free.readResource({ uri: "analytics://overview" })).rejects.toThrow();                            // Free: no MCP entitlement
+    expect((await free.readResource({ uri: "analytics://overview" })).contents).toHaveLength(1);                     // Free has MCP since pricing v2
     expect(JSON.parse((await free.readResource({ uri: "billing://usage" })).contents[0]!.text as string).plan).toBe("free");
     await upgrade(ws);
     await seedPublished(ws, owner, accounts.x!);
