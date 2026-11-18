@@ -18,7 +18,7 @@ async function post(apiUrl: string, path: string, body: Record<string, string | 
   return { status: res.status, json };
 }
 
-export interface DeviceStart { device_code: string; user_code: string; verification_uri: string; verification_uri_complete: string; expires_in: number; interval: number }
+export interface DeviceStart { device_code: string; user_code: string; verification_uri: string; expires_in: number; interval: number }
 export const startDevice = async (apiUrl: string, clientName: string, f?: typeof fetch): Promise<DeviceStart> => {
   const r = await post(apiUrl, "/mcp/device", { client_name: clientName }, f);
   if (r.status !== 200) throw new ApiError("start_failed", `Could not start login (HTTP ${r.status})`);

@@ -27,11 +27,11 @@ function credentials(): Credentials {
 async function login() {
   const apiUrl = normalizeApiUrl(flag("--api-url") ?? process.env["POSTRALLY_API_URL"] ?? "");
   const d = await startDevice(apiUrl, "postrally-cli");
-  say(`Open ${d.verification_uri_complete}\nand confirm the code ${d.user_code}. Waiting for approval...`);
+  say(`Open ${d.verification_uri}\nand enter the code ${d.user_code}. Waiting for approval...`);
   // Only auto-open a link on the API's own origin: a hostile --api-url must not make us launch arbitrary strings.
   let sameOrigin = false;
-  try { sameOrigin = new URL(d.verification_uri_complete).origin === apiUrl; } catch { /* printed above */ }
-  if (sameOrigin) openBrowser(d.verification_uri_complete);
+  try { sameOrigin = new URL(d.verification_uri).origin === apiUrl; } catch { /* printed above */ }
+  if (sameOrigin) openBrowser(d.verification_uri);
   const creds = await pollDevice(apiUrl, d);
   store.save(creds);
   say(`Logged in (credentials stored in ${store.backendName()}).`);

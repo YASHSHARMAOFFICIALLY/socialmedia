@@ -121,7 +121,12 @@ export function mcpRoutes(d: McpRouteDeps) {
       const info = await d.auth.authorizeRequest(q);
       const wss = (await d.deps.db.query<{ id: string; name: string }>("SELECT w.id, w.name FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id WHERE m.user_id = $1 AND m.role IN ('owner','admin') ORDER BY w.name LIMIT 50", [req.user!.id])).rows;
       const hidden = Object.entries({ ...q, scope: info.scopes.join(" "), state: String(req.query["state"] ?? "") }).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(String(v))}">`).join("");
-      res.send(`${pageHead}<title>Authorize ${esc(info.clientName)}</title><body ${pageStyle}><h1>Let “${esc(info.clientName)}” connect?</h1><p>It will be able to: ${info.scopes.map(esc).join(", ")}. It acts with your own permissions in the workspace you pick, and you can revoke it at any time.</p>
+      // Anyone can register a client with any name, so the name proves nothing: show where the grant is sent.
+      const target = new URL(q.redirect_uri);
+      const sendsTo = target.host || target.protocol;
+      res.send(`${pageHead}<title>Authorize ${esc(info.clientName)}</title><body ${pageStyle}><h1>Let “${esc(info.clientName)}” connect?</h1>
+<p><b>This app is not verified by PostRally.</b> Its name is chosen by whoever registered it. Access is sent to <b>${esc(sendsTo)}</b>. Allow only if you started this connection and recognise that address.</p>
+<p>It will be able to: ${info.scopes.map(esc).join(", ")}. It acts with your own permissions in the workspace you pick, and you can revoke it at any time.</p>
 ${wss.length ? `<form method="post" action="/mcp/authorize">${hidden}<label>Workspace <select name="workspace_id">${wss.map((w) => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("")}</select></label>
 <p><button name="decision" value="approve">Allow</button> <button name="decision" value="deny">Deny</button></p></form>` : `<p>Only workspace owners and admins can connect clients. You have no such workspace.</p>`}</body>`);
     } catch (e) {
@@ -138,17 +143,36 @@ ${wss.length ? `<form method="post" action="/mcp/authorize">${hidden}<label>Work
     res.send(`${pageHead}<meta http-equiv="refresh" content="0;url=${esc(to)}"><title>Returning</title><body ${pageStyle}><h1>${ok.data.decision === "approve" ? "Connected" : "Denied"}</h1><p><a href="${esc(to)}">Return to the application</a></p></body>`);
   });
 
-  // Approval page: needs the browser's existing sign-in cookie. Plain server-rendered HTML, no frontend required.
-  r.get("/mcp/device", d.authed, async (req, res) => {
-    const code = String(req.query["user_code"] ?? "");
+  // Approval pages: need the browser's existing sign-in cookie. Plain server-rendered HTML, no frontend required.
+  // The user types the code their own terminal shows. A ?user_code= link is ignored, so a phishing link with an
+  // attacker's code (and an attacker-chosen client name) cannot be approved in one click.
+  const deviceCsp = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'";
+  const devicePage = (title: string, body: string) =>
+    `${pageHead}<title>${title}</title><body style="font:16px system-ui;max-width:28rem;margin:3rem auto;padding:0 1rem">${body}</body>`;
+  r.get("/mcp/device", d.authed, (_req, res) => {
+    res.type("html").setHeader("Content-Security-Policy", deviceCsp);
+    res.send(devicePage("Connect a client", `<h1>Connect a client</h1>
+<p>Enter the code shown in the terminal where you ran the PostRally CLI. Never enter a code someone sent you.</p>
+<form method="post" action="/mcp/device/review"><label>Code <input name="user_code" autocomplete="off" autocapitalize="characters" required></label>
+<p><button>Continue</button></p></form>`));
+  });
+  r.post("/mcp/device/review", d.authed, sameOrigin, d.limit({ name: "mcp-device-review", limit: 10, windowS: 60 }), form, async (req, res) => {
+    const code = String(req.body?.user_code ?? "").trim();
     const info = code ? await d.auth.deviceInfo(code) : null;
-    const wss = (await d.deps.db.query<{ id: string; name: string }>("SELECT w.id, w.name FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id WHERE m.user_id = $1 ORDER BY w.name LIMIT 50", [req.user!.id])).rows;
-    res.type("html").setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'");
-    res.send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect a client</title><body style="font:16px system-ui;max-width:28rem;margin:3rem auto;padding:0 1rem">${
-      info ? `<h1>Connect “${esc(info.clientName)}”</h1><p>Code <b>${esc(code.toUpperCase())}</b>. This client will be able to: ${info.scopes.map(esc).join(", ")}. It acts with your own permissions and can be revoked at any time.</p>
-<form method="post" action="/mcp/device/approve"><input type="hidden" name="user_code" value="${esc(code)}"><label>Workspace <select name="workspace_id">${wss.map((w) => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("")}</select></label>
-<p><button name="decision" value="approve">Approve</button> <button name="decision" value="deny">Deny</button></p></form>`
-      : `<h1>Code not found</h1><p>The code is invalid or expired. Start again from the command line.</p>`}</body>`);
+    res.type("html").setHeader("Content-Security-Policy", deviceCsp);
+    if (!info) {
+      res.status(404).send(devicePage("Code not found", `<h1>Code not found</h1><p>The code is invalid or expired. Start again from the command line.</p>`));
+      return;
+    }
+    const wss = (await d.deps.db.query<{ id: string; name: string }>(
+      "SELECT w.id, w.name FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id WHERE m.user_id = $1 ORDER BY w.name LIMIT 50",
+      [req.user!.id])).rows;
+    const options = wss.map((w) => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("");
+    res.send(devicePage("Connect a client", `<h1>Connect “${esc(info.clientName)}”?</h1>
+<p><b>This client is not verified by PostRally:</b> it names itself. Approve only if you just started it on your own computer.</p>
+<p>It will be able to: ${info.scopes.map(esc).join(", ")}. It acts with your own permissions and can be revoked at any time.</p>
+<form method="post" action="/mcp/device/approve"><input type="hidden" name="user_code" value="${esc(code)}"><label>Workspace <select name="workspace_id">${options}</select></label>
+<p><button name="decision" value="approve">Approve</button> <button name="decision" value="deny">Deny</button></p></form>`));
   });
   r.post("/mcp/device/approve", d.authed, sameOrigin, d.limit({ name: "mcp-device-approve", limit: 10, windowS: 60 }), form, async (req, res) => {
     const b = req.body ?? {};

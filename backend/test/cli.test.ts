@@ -14,7 +14,7 @@ import { createTestApp } from "./helpers/app.js";
 import { world } from "./helpers/world.js";
 
 const json = (status: number, body: object) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const dev = { device_code: "dsd_x", user_code: "ABCD-2345", verification_uri: "u", verification_uri_complete: "u?c", expires_in: 600, interval: 5 };
+const dev = { device_code: "dsd_x", user_code: "ABCD-2345", verification_uri: "u", expires_in: 600, interval: 5 };
 
 describe("CLI: login, refresh, storage", () => {
   beforeEach(() => { process.env["POSTRALLY_CONFIG_DIR"] = mkdtempSync(join(tmpdir(), "postrally-")); });

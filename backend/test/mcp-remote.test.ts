@@ -109,13 +109,18 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     await upgrade(ws);
     const start = (await request(t.app).post("/mcp/device").send({ client_name: "postrally-cli", scopes: ["analytics:read", "billing:read"] })).body;
     expect(start.user_code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-    expect(start.verification_uri_complete).toContain(start.user_code);
+    expect(start.verification_uri_complete).toBeUndefined();   // the user must type the code: a link cannot pre-fill it
     const poll = (code = start.device_code) => request(t.app).post("/mcp/token").type("form").send({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code: code });
     expect((await poll()).body.error).toBe("authorization_pending");
     expect((await poll()).body.error).toBe("slow_down");                                              // polled again within the interval
     expect((await request(t.app).get("/mcp/device")).status).toBe(401);                                // approval page needs a signed-in browser
-    const page = await owner.agent.get(`/mcp/device?user_code=${start.user_code}`);
-    expect(page.text).toContain("postrally-cli");
+    const linked = await owner.agent.get(`/mcp/device?user_code=${start.user_code}`);   // a phishing link with the attacker's code
+    expect(linked.text).not.toContain(start.user_code);
+    expect(linked.text).not.toContain("postrally-cli");
+    expect(linked.text).toContain('name="user_code"');
+    const page = await owner.agent.post("/mcp/device/review").type("form").send({ user_code: start.user_code });
+    expect(page.text).toContain("analytics:read");
+    expect(page.text).toContain("not verified");
     expect(page.text).toContain(ws);
     const stranger = await t.newUser("st");
     const viewer = await t.newUser("vw");
@@ -174,6 +179,8 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
       const page = await owner.agent.get(`/mcp/authorize?${q(client_id)}`);
       expect(page.status).toBe(200);
       expect(page.text).toContain("Claude");
+      expect(page.text).toContain(new URL(new URLSearchParams(q(client_id)).get("redirect_uri")!).host);   // where the code goes
+      expect(page.text).toContain("not verified");
       expect((await request(t.app).get(`/mcp/authorize?${q(client_id)}`)).status).toBe(302);                 // not signed in: sent to the app login
       const done = await approve(owner, client_id, ws);
       expect(done.status).toBe(200);
