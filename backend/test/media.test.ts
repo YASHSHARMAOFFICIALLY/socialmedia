@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { cleanupAbandonedUploads } from "../src/modules/media/media.service.js";
+import { cleanupAbandonedUploads, purgeDeletedObjects } from "../src/modules/media/media.service.js";
 import { imageDimensions, sniffMime } from "../src/modules/media/media.sniff.js";
 import { createMemoryStorage, createTestApp } from "./helpers/app.js";
 
@@ -133,6 +133,18 @@ describe("media module", async () => {
     const vid = (await owner.agent.get(`/workspaces/${ws}/media/${mov}/compatibility`)).body.data;
     expect(vid.linkedin.compatible).toBe(false);           // MP4 only
     expect(vid.youtube.compatible).toBe(true);
+  });
+
+  it("deleting a workspace removes its stored objects too (queued in the same transaction, drained by housekeeping)", async () => {
+    const { owner, ws } = await setup();
+    const id = (await upload(owner, ws, png(3, 3), "image/png", "gone.png")).body.data.media.id;
+    await owner.agent.post(`/workspaces/${ws}/media/${id}/confirm`);
+    const key = (await t.db.query<{ storage_key: string }>("SELECT storage_key FROM media_assets WHERE id = $1", [id])).rows[0]!.storage_key;
+    expect(mem.objects.has(key)).toBe(true);
+    expect((await owner.agent.delete(`/workspaces/${ws}`).send({ confirmName: "W" })).status).toBe(204);
+    expect(await purgeDeletedObjects(t.db, mem.storage)).toBeGreaterThanOrEqual(1);
+    expect(mem.objects.has(key)).toBe(false);
+    expect((await t.db.query("SELECT 1 FROM storage_deletions WHERE storage_key = $1", [key])).rowCount).toBe(0);
   });
 
   it("cleanup removes stale unconfirmed uploads but never attached or fresh ones", async () => {

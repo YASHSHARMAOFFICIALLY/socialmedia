@@ -167,6 +167,19 @@ export function createMediaService(deps: { db: Db; workspaces: WorkspaceService;
 export type MediaService = ReturnType<typeof createMediaService>;
 
 /** Maintenance (cron): drop uploads that were never confirmed, and rejected files. */
+/** Deletes queued objects from storage. A key stays queued until its delete succeeds, so the next run retries it. */
+export async function purgeDeletedObjects(db: Db, storage: ObjectStorage | null, limit = 500): Promise<number> {
+  if (!storage) return 0;
+  const keys = (await db.query<{ storage_key: string }>("SELECT storage_key FROM storage_deletions ORDER BY created_at LIMIT $1", [limit])).rows;
+  const done: string[] = [];
+  for (const { storage_key } of keys) {
+    const ok = await storage.delete(storage_key).then(() => true, () => false);
+    if (ok) done.push(storage_key);
+  }
+  if (done.length) await db.query("DELETE FROM storage_deletions WHERE storage_key = ANY($1::text[])", [done]);
+  return done.length;
+}
+
 export async function cleanupAbandonedUploads(db: Db, storage: ObjectStorage | null, olderThanHours = 24): Promise<number> {
   const rows = (await repo.staleUploads(db, olderThanHours, 100)).rows;
   for (const r of rows) {

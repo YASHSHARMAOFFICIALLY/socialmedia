@@ -9,9 +9,10 @@ import { createLogger } from "../infrastructure/logger/logger.js";
 import { hyperdriveDb } from "../infrastructure/database/db.js";
 import { createKvCache } from "../infrastructure/cache/cache.js";
 import { cloudflareQueue } from "../infrastructure/queues/queue.js";
-import { cleanupAbandonedUploads } from "../modules/media/media.service.js";
+import { cleanupAbandonedUploads, purgeDeletedObjects } from "../modules/media/media.service.js";
 import { purgeOldRows } from "../workers/maintenance.js";
 import { beat } from "../workers/heartbeat.js";
+import type { ObjectStorage } from "../infrastructure/storage/storage.js";
 
 // Bindings declared in wrangler.jsonc. Env is only readable at request time, so everything is built lazily.
 const bindings = env as unknown as Record<string, unknown> & { HYPERDRIVE: Hyperdrive; PUBLISH_QUEUE: Queue<{ jobId: string }>; ANALYTICS_QUEUE: Queue<{ targetId: string }>; CACHE?: KVNamespace };
@@ -69,7 +70,25 @@ export default {
       ]);
       if (publishing && (publishing.errors.length || publishing.dispatched || publishing.reconciled || publishing.missed)) log.info({ report: publishing }, "publishing sweep");
       // Housekeeping runs at most hourly (minute 0) and is isolated from publishing.
-      if (new Date(_event.scheduledTime).getUTCMinutes() === 0) { await cleanupAbandonedUploads(db, storage ?? null).catch((err) => log.error({ err }, "media cleanup failed")); await engine.reports.purgeExpired().catch((err) => log.error({ err }, "export purge failed")); await purgeOldRows(db).catch((err) => log.error({ err }, "housekeeping failed")); await engine.webhooks.purge().catch((err) => log.error({ err }, "webhook purge failed")); await engine.billing.purge().catch((err) => log.error({ err }, "billing purge failed")); await engine.mcp.purge().catch((err) => log.error({ err }, "mcp purge failed")); await engine.tokens.keepAlive().catch((err) => log.error({ err }, "token keep-alive failed")); await engine.tokens.reencryptStale().catch((err) => log.error({ err }, "token re-encryption failed")); }
+      if (new Date(_event.scheduledTime).getUTCMinutes() === 0) await housekeeping(engine, db, log, storage ?? null);
     })());
   },
 };
+
+/** Hourly. Each task is isolated: one failing never stops the next. Run in order to keep the DB load low. */
+async function housekeeping(engine: Deps["engine"], db: Deps["db"], log: Deps["log"], storage: ObjectStorage | null) {
+  const tasks: [string, () => Promise<unknown>][] = [
+    ["media cleanup", () => cleanupAbandonedUploads(db, storage)],
+    ["storage purge", () => purgeDeletedObjects(db, storage)],
+    ["export purge", () => engine.reports.purgeExpired()],
+    ["housekeeping", () => purgeOldRows(db)],
+    ["webhook purge", () => engine.webhooks.purge()],
+    ["billing purge", () => engine.billing.purge()],
+    ["mcp purge", () => engine.mcp.purge()],
+    ["token keep-alive", () => engine.tokens.keepAlive()],
+    ["token re-encryption", () => engine.tokens.reencryptStale()],
+  ];
+  for (const [name, run] of tasks) {
+    await run().catch((err) => log.error({ err }, `${name} failed`));
+  }
+}
