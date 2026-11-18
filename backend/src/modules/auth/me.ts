@@ -26,8 +26,11 @@ export function createMeService(db: Db) {
         await q.query("DELETE FROM mcp_grants WHERE user_id = $1", [user.id]);
         await q.query(`DELETE FROM "session" WHERE "userId" = $1`, [user.id]);
         await q.query(`DELETE FROM "account" WHERE "userId" = $1`, [user.id]);
-        await q.query(`DELETE FROM "verification" WHERE identifier = $1 OR identifier LIKE $2`, [user.email, `%${user.email}%`]);
-        await q.query(`UPDATE "user" SET name = 'Deleted user', email = $2, "emailVerified" = false, image = NULL WHERE id = $1`, [user.id, `deleted-${user.id}@deleted.invalid`]);
+        const literal = user.email.replace(/[\\%_]/g, (ch) => `\\${ch}`);   // _ and % in an email are not wildcards
+        await q.query(`DELETE FROM "verification" WHERE identifier = $1 OR identifier LIKE $2 ESCAPE '\\'`, [user.email, `%${literal}%`]);
+        await q.query(
+          `UPDATE "user" SET name = 'Deleted user', email = $2, "emailVerified" = false, image = NULL, username = NULL, "displayUsername" = NULL WHERE id = $1`,
+          [user.id, `deleted-${user.id}@deleted.invalid`]);
       });
     },
   };

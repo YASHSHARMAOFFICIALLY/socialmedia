@@ -94,6 +94,21 @@ describe("account erasure (DELETE /me)", async () => {
   });
 });
 
+describe("account erasure leaves nothing that identifies the user", async () => {
+  const t = await createTestApp();
+  afterAll(t.close);
+  it("clears the username, and deletes only this user's verification rows (_ and % in the email are literal)", async () => {
+    const u = await t.newUser("er_se");
+    await t.db.query(`UPDATE "user" SET username = 'er_se', "displayUsername" = 'Er_Se' WHERE id = $1`, [u.id]);
+    const lookalike = u.email.replace("_", "X");
+    await t.db.query(`INSERT INTO "verification" (id, identifier, value, "expiresAt") VALUES ('v-other', $1, 'x', now() + interval '1 day')`, [lookalike]);
+    expect((await u.agent.delete("/me").send({ confirmEmail: u.email })).status).toBe(204);
+    const row = (await t.db.query(`SELECT username, "displayUsername" FROM "user" WHERE id = $1`, [u.id])).rows[0];
+    expect(row).toEqual({ username: null, displayUsername: null });
+    expect((await t.db.query(`SELECT 1 FROM "verification" WHERE id = 'v-other'`)).rowCount).toBe(1);
+  });
+});
+
 describe("username sign-in", async () => {
   const t = await createTestApp();
   afterAll(t.close);
