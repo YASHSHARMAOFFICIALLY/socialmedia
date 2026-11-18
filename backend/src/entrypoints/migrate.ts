@@ -10,7 +10,8 @@ try {
   const applied = await migrate(poolDb(pool));
   console.log(applied.length ? `applied: ${applied.join(", ")}` : "no pending migrations");
 } catch (e) {
-  console.error((e as Error).message);
+  // Some pg errors (AggregateError on connect) have an empty message: print the whole error.
+  console.error(e);
   process.exitCode = 1;
 } finally {
   await pool.end();
