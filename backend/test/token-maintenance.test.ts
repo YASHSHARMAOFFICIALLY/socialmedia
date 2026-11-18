@@ -81,7 +81,21 @@ describe("token maintenance", async () => {
     expect(after.access_token_enc.startsWith("2.")).toBe(true);
     expect(after.refresh_token_enc.startsWith("2.")).toBe(true);
     expect(await t2.deps.accounts.getAccessToken(w.ws, id)).toBe("plain-access-token");
-    expect(await t2.deps.engine.tokens.reencryptStale()).toEqual({ rewritten: 0, remaining: 0 });   // converged: the old key can now be removed
+    expect(await t2.deps.engine.tokens.reencryptStale()).toEqual({ rewritten: 0, failed: 0, remaining: 0 });   // converged: the old key can now be removed
+    await t2.close();
+  });
+
+  it("one credential that cannot be decrypted is flagged for reconnect and never blocks the others", async () => {
+    const rotated = `2:${Buffer.alloc(32, 9).toString("base64")},${TEST_KEYS}`;
+    const t2 = await createTestApp([adapter], { env: { TOKEN_ENC_KEYS: rotated } });
+    const w = await world(t2, []);
+    const broken = await seedAccount(t2, w.ws, w.owner, "instagram");
+    const good = await seedAccount(t2, w.ws, w.owner, "instagram");
+    await t2.db.query("UPDATE oauth_credentials SET access_token_enc = '1.not-a-real-ciphertext' WHERE social_account_id = $1", [broken]);
+    expect(await t2.deps.engine.tokens.reencryptStale()).toMatchObject({ rewritten: 1, failed: 1 });
+    expect(await t2.deps.accounts.getAccessToken(w.ws, good)).toBe("plain-access-token");
+    expect((await t2.db.query("SELECT status FROM social_accounts WHERE id = $1", [broken])).rows[0]).toEqual({ status: "needs_reauth" });
+    expect(await t2.deps.engine.tokens.reencryptStale()).toMatchObject({ rewritten: 0, remaining: 0 });   // converged
     await t2.close();
   });
 });

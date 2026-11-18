@@ -94,7 +94,7 @@ export interface Engine {
   billing: { sweep(): Promise<{ due: number; processed: number }>; purge(): Promise<number> };
   mcp: { purge(): Promise<void> };
   recurring: { sweep(): Promise<{ materialized: number; scheduled: number; failed: number; skipped: number }> };
-  tokens: { keepAlive(): Promise<{ due: number; refreshed: number; failed: number }>; reencryptStale(): Promise<{ rewritten: number; remaining: number | string }> };
+  tokens: { keepAlive(): Promise<{ due: number; refreshed: number; failed: number }>; reencryptStale(): Promise<{ rewritten: number; failed: number; remaining: number | string }> };
 }
 export interface Deps { cfg: Config; log: Logger; db: Db; auth: Auth; workspaces: WorkspaceService; accounts: AccountService; content: ContentService; publishing: PublishingService; media: MediaService; scheduling: SchedulingService; analytics: AnalyticsService; campaigns: CampaignService; approvals: ApprovalService; notifications: NotificationService; insights: InsightsService; reports: ReportService; recurring: RecurringService; webhooks: WebhookService; competitors: CompetitorService; ai: AiService; billing: BillingService; billingPayments: BillingPayments; mcpAuth: McpAuth; metrics?: Metrics; storage?: import("./infrastructure/storage/storage.js").ObjectStorage | null; engine: Engine }
 

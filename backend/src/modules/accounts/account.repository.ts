@@ -73,8 +73,11 @@ export const accountRepository = {
   /** Credentials not written with the current key (after rotation). */
   staleKey: (q: Queryable, keyId: string, limit: number) =>
     q.query<{ workspace_id: string; social_account_id: string }>(
-      `SELECT workspace_id, social_account_id FROM oauth_credentials
-        WHERE left(access_token_enc, length($1) + 1) <> $1 || '.' OR (refresh_token_enc IS NOT NULL AND left(refresh_token_enc, length($1) + 1) <> $1 || '.') LIMIT $2`, [keyId, limit]),
+      `SELECT c.workspace_id, c.social_account_id FROM oauth_credentials c
+         JOIN social_accounts a ON a.id = c.social_account_id AND a.status <> 'needs_reauth'
+        WHERE left(c.access_token_enc, length($1) + 1) <> $1 || '.'
+           OR (c.refresh_token_enc IS NOT NULL AND left(c.refresh_token_enc, length($1) + 1) <> $1 || '.')
+        LIMIT $2`, [keyId, limit]),
   rewriteEncrypted: (q: Queryable, workspaceId: string, accountId: string, accessEnc: string, refreshEnc: string | null) =>
     q.query("UPDATE oauth_credentials SET access_token_enc = $3, refresh_token_enc = $4 WHERE workspace_id = $1 AND social_account_id = $2", [workspaceId, accountId, accessEnc, refreshEnc]),
 };

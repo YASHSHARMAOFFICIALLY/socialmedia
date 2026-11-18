@@ -156,15 +156,24 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
     async reencryptStale(limit = 50) {
       const c = cipher();
       const rows = (await repo.staleKey(db, c.keyId, limit)).rows;
+      let failed = 0;
       for (const r of rows) {
-        await db.tx(async (q) => {
+        const rewrite = db.tx(async (q) => {
           const cred = await repo.lockCredentials(q, r.workspace_id, r.social_account_id);
           if (!cred) return;
           const id = aad(r.social_account_id);
-          await repo.rewriteEncrypted(q, r.workspace_id, r.social_account_id, await c.encrypt(await c.decrypt(cred.access_token_enc, id), id), cred.refresh_token_enc ? await c.encrypt(await c.decrypt(cred.refresh_token_enc, id), id) : null);
+          const access = await c.encrypt(await c.decrypt(cred.access_token_enc, id), id);
+          const refresh = cred.refresh_token_enc ? await c.encrypt(await c.decrypt(cred.refresh_token_enc, id), id) : null;
+          await repo.rewriteEncrypted(q, r.workspace_id, r.social_account_id, access, refresh);
+        });
+        // A row no key can decrypt is unusable: flag it for reconnect (staleKey then skips it) instead of failing every run on it.
+        await rewrite.catch(async (err) => {
+          failed++;
+          deps.log?.error({ err, accountId: r.social_account_id }, "credential could not be re-encrypted");
+          await repo.setStatus(db, r.workspace_id, r.social_account_id, "needs_reauth", "Stored credentials could not be read; reconnect the account");
         });
       }
-      return { rewritten: rows.length, remaining: rows.length === limit ? "more" : 0 };
+      return { rewritten: rows.length - failed, failed, remaining: rows.length === limit ? "more" : 0 };
     },
     platforms: () => registry.list(),
 
