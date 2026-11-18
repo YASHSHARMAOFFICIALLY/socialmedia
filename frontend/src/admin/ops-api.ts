@@ -4,28 +4,17 @@ import { useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { apiUrl } from "@/lib/site";
 
-// The ops token lives in sessionStorage only (gone when the tab closes) and is read through
-// useSyncExternalStore, so there is no effect and no hydration mismatch: the server snapshot is
-// `undefined` ("not known yet"), the client snapshot is the token or null.
-const KEY = "postrally.opsToken";
+// The ops token lives in memory only: never in web storage, where any script on the page could read
+// it. A reload asks for it again. Read through useSyncExternalStore, so there is no effect and no
+// hydration mismatch: the server snapshot is `undefined` ("not known yet"), the client's is the token or null.
 const listeners = new Set<() => void>();
+let token: string | null = null;
 let rejected = false;
 
-function read(): string | null {
-  try {
-    return sessionStorage.getItem(KEY);
-  } catch {
-    return null; // storage blocked: the gate shows and asks again
-  }
-}
+const read = (): string | null => token;
 
-export function setToken(token: string | null, wasRejected = false) {
-  try {
-    if (token) sessionStorage.setItem(KEY, token);
-    else sessionStorage.removeItem(KEY);
-  } catch {
-    // storage blocked: nothing to persist
-  }
+export function setToken(next: string | null, wasRejected = false) {
+  token = next;
   rejected = wasRejected;
   listeners.forEach((l) => l());
 }

@@ -140,14 +140,37 @@ const Stat = ({ label, value, sub, tone = "none" }: { label: string; value: Reac
   </div>
 );
 
-function Table({ head, right = [], rows, empty, caption }: { head: string[]; right?: number[]; rows: ReactNode[][]; empty: string; caption: string }) {
-  if (!rows.length) return <p className="rounded-lg border border-dashed border-line px-4 py-6 text-sm text-muted">{empty}</p>;
+type TableProps = { head: string[]; right?: number[]; rows: ReactNode[][]; empty: string; caption: string };
+
+function Table({ head, right = [], rows, empty, caption }: TableProps) {
+  if (!rows.length) {
+    return <p className="rounded-lg border border-dashed border-line px-4 py-6 text-sm text-muted">{empty}</p>;
+  }
+  const rightAligned = new Set(right);
+  const headCells = head.map((h, i) => (
+    <th key={h} scope="col" className={cn("px-3 py-2.5 font-medium", rightAligned.has(i) && "text-right")}>
+      {h}
+    </th>
+  ));
+  const bodyRows = rows.map((r, ri) => (
+    // react-doctor-disable-next-line react-doctor/no-array-index-as-key -- read-only rows, redrawn from each poll; no row state to keep
+    <tr key={ri} className="border-t border-line">
+      {r.map((c, i) => (
+        <td
+          key={head[i]}
+          className={cn("px-3 py-2.5 align-top", rightAligned.has(i) && "text-right font-mono tabular-nums")}
+        >
+          {c}
+        </td>
+      ))}
+    </tr>
+  ));
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
       <table className="w-full min-w-max text-left text-sm">
         <caption className="sr-only">{caption}</caption>
-        <thead className="text-muted"><tr>{head.map((h, i) => <th key={h} scope="col" className={cn("px-3 py-2.5 font-medium", right.includes(i) && "text-right")}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((r, ri) => <tr key={ri} className="border-t border-line">{r.map((c, i) => <td key={i} className={cn("px-3 py-2.5 align-top", right.includes(i) && "text-right font-mono tabular-nums")}>{c}</td>)}</tr>)}</tbody>
+        <thead className="text-muted"><tr>{headCells}</tr></thead>
+        <tbody>{bodyRows}</tbody>
       </table>
     </div>
   );
@@ -187,18 +210,62 @@ const NotTracked = ({ children }: { children: ReactNode }) => <span className="t
 
 // ---- panels ----
 
+type StatProps = { label: string; value: ReactNode; sub?: ReactNode; tone?: Tone };
+
+function databaseStat(db: Overview["data"]["status"]["db"]): StatProps {
+  if (!db.ok) {
+    return { label: "Database", value: "Unreachable", tone: "bad" };
+  }
+  return { label: "Database", value: fmtMs(db.latencyMs), sub: "connect + SELECT 1 via Hyperdrive" };
+}
+
+function backlogStat(d: Overview["data"]): StatProps {
+  const backlog = d.status.backlog;
+  const due = (backlog?.jobsDue ?? 0) + (backlog?.outboxDue ?? 0);
+  const oldest = Math.max(backlog?.outboxOldestS ?? 0, d.queues.jobs?.oldestPendingAgeS ?? 0);
+  return {
+    label: "Backlog due now",
+    value: fmtInt(due),
+    tone: oldest > 300 ? "warn" : "none",
+    sub: oldest ? `oldest ${fmtAge(oldest)}` : "nothing waiting",
+  };
+}
+
+function cronStat(cron: { alive: boolean; lastBeatSecondsAgo?: number } | undefined): StatProps {
+  const seen = cron?.lastBeatSecondsAgo;
+  const value = seen !== undefined ? `${fmtAge(seen)} ago` : "Never";
+  if (!cron?.alive) {
+    return { label: "Last cron tick", value, tone: "bad", sub: "Stalled: no tick in 3 minutes" };
+  }
+  return { label: "Last cron tick", value, sub: "sweeper + outbox relay, every minute" };
+}
+
+function errorRateStat(errors: Overview["data"]["status"]["errorRate1h"]): StatProps {
+  const high = errors.rate !== null && errors.rate > 0.05;
+  return {
+    label: "5xx rate, last hour",
+    value: fmtPct(errors.rate),
+    tone: high ? "bad" : "none",
+    sub: `of ${fmtInt(errors.requests)} requests`,
+  };
+}
+
 function StatusStrip({ d, loading }: { d?: Overview["data"]; loading: boolean }) {
-  if (!d) return loading ? <div className="mt-8 h-24 rounded-lg bg-secondary motion-safe:animate-pulse" /> : null;
-  const s = d.status, cron = s.workers?.scheduling;
-  const backlogAge = Math.max(s.backlog?.outboxOldestS ?? 0, d.queues.jobs?.oldestPendingAgeS ?? 0);
-  const rate = s.errorRate1h.rate;
+  if (!d) {
+    return loading ? <div className="mt-8 h-24 rounded-lg bg-secondary motion-safe:animate-pulse" /> : null;
+  }
+  const stats: StatProps[] = [
+    { label: "API", value: "Up", tone: "ok", sub: "answered this snapshot" },
+    databaseStat(d.status.db),
+    backlogStat(d),
+    cronStat(d.status.workers?.scheduling),
+    errorRateStat(d.status.errorRate1h),
+  ];
   return (
     <dl className="mt-8 grid grid-cols-2 gap-x-6 border-y border-line sm:grid-cols-3 lg:grid-cols-5">
-      <Stat label="API" value="Up" tone="ok" sub="answered this snapshot" />
-      <Stat label="Database" value={s.db.ok ? fmtMs(s.db.latencyMs) : "Unreachable"} tone={s.db.ok ? "none" : "bad"} sub={s.db.ok ? "connect + SELECT 1 via Hyperdrive" : undefined} />
-      <Stat label="Backlog due now" value={fmtInt((s.backlog?.jobsDue ?? 0) + (s.backlog?.outboxDue ?? 0))} tone={backlogAge > 300 ? "warn" : "none"} sub={backlogAge ? `oldest ${fmtAge(backlogAge)}` : "nothing waiting"} />
-      <Stat label="Last cron tick" value={cron?.lastBeatSecondsAgo !== undefined ? `${fmtAge(cron.lastBeatSecondsAgo)} ago` : "Never"} tone={cron?.alive ? "none" : "bad"} sub={cron?.alive ? "sweeper + outbox relay, every minute" : "Stalled: no tick in 3 minutes"} />
-      <Stat label="5xx rate, last hour" value={fmtPct(rate)} tone={rate !== null && rate > 0.05 ? "bad" : "none"} sub={`of ${fmtInt(s.errorRate1h.requests)} requests`} />
+      {stats.map((stat) => (
+        <Stat key={stat.label} {...stat} />
+      ))}
     </dl>
   );
 }
@@ -380,7 +447,8 @@ function Database({ d, state }: { d?: Overview["data"]; state: OvState }) {
               <div>
                 <p className="text-sm text-muted">Postgres size against the Neon {db.planName} cap ({db.planLimitSource === "neon.max_cluster_size" ? "read live from Neon" : "plan constant"})</p>
                 <p className="mt-2 font-mono text-3xl text-ink tabular-nums">{fmtBytes(db.sizeBytes)} <span className="text-lg text-muted">of {fmtBytes(db.planLimitBytes)}</span></p>
-                <div role="meter" aria-label="Database storage used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={used === null ? undefined : Math.round(used * 100)} className="mt-3 h-2.5 overflow-hidden rounded-full bg-secondary">
+                <meter className="sr-only" min={0} max={1} value={used ?? 0} aria-label="Database storage used">{fmtPct(used)}</meter>
+                <div aria-hidden className="mt-3 h-2.5 overflow-hidden rounded-full bg-secondary">
                   <div className={cn("h-full rounded-full", (used ?? 0) > 0.8 ? "bg-[#b42318]" : "bg-ink")} style={{ width: `${Math.max(Math.min((used ?? 0) * 100, 100), 0.5)}%` }} />
                 </div>
                 <p className="mt-2 text-sm text-muted">{fmtPct(used)} used. Round trip {fmtMs(db.latencyMs)}.</p>

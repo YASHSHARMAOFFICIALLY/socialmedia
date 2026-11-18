@@ -3,6 +3,7 @@ import { LandingPage } from "@/landing/landing-page";
 import { footer, productName } from "@/landing/content";
 import { mdAlt } from "@/lib/ai-pages";
 import { siteUrl } from "@/lib/site";
+import { JsonLd } from "@/components/json-ld";
 
 export const metadata: Metadata = { alternates: { canonical: "/", types: mdAlt("/") } };
 
@@ -21,7 +22,7 @@ const jsonLd = {
 export default function Home() {
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
+      <JsonLd data={jsonLd} />
       <LandingPage />
     </>
   );

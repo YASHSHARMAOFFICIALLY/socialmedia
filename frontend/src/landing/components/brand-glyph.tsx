@@ -4,7 +4,7 @@ import { assistantLogos } from "./assistant-logos";
 
 // One brand glyph (network or AI app) in its own colour. Instagram uses its pink, since the
 // gradient only exists in the hero. Decorative: the name is always written next to it.
-export const brandColor = (name: string) => (name === "Instagram" ? "#d6249f" : (networkLogos[name] ?? assistantLogos[name as keyof typeof assistantLogos])?.color);
+const brandColor = (name: string) => (name === "Instagram" ? "#d6249f" : (networkLogos[name] ?? assistantLogos[name as keyof typeof assistantLogos])?.color);
 
 export function BrandGlyph({ name, className }: { name: string; className?: string }) {
   const logo = networkLogos[name] ?? assistantLogos[name as keyof typeof assistantLogos];

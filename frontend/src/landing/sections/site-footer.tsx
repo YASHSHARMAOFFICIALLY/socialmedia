@@ -180,9 +180,11 @@ export function SiteFooter() {
             <Link href="/terms" className="inline-flex min-h-9 items-center hover:text-ink">
               Terms
             </Link>
+            {/* react-doctor-disable-next-line react-doctor/nextjs-no-a-element -- a text file, not a page: next/link would try a client-side page load first */}
             <a href="/llms.txt" className="inline-flex min-h-9 items-center hover:text-ink">
               llms.txt
             </a>
+            {/* react-doctor-disable-next-line react-doctor/nextjs-no-a-element -- a text file, not a page: next/link would try a client-side page load first */}
             <a href="/sitemap.xml" className="inline-flex min-h-9 items-center hover:text-ink">
               Sitemap
             </a>

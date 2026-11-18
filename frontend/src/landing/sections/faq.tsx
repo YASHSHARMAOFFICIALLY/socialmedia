@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { faq } from "../content";
 import { Section } from "../components/layout";
+import { JsonLd } from "@/components/json-ld";
 
 // Ribbon layout: title and intro on the left, questions on the right. Native <details>, no client JS.
 // JSON-LD lets search engines show these answers directly.
@@ -36,7 +37,7 @@ export function Faq() {
           ))}
         </div>
       </div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+      <JsonLd data={structuredData} />
     </Section>
   );
 }

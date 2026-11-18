@@ -118,13 +118,21 @@ export function priceFor(plan: Plan, region: Region, interval: Interval): number
   return monthly;
 }
 
+// Built once per region: the toggle and the plan tabs format prices on every click.
+const priceFormatters: Record<Region, Intl.NumberFormat> = {
+  india: new Intl.NumberFormat(currency.india.locale, {
+    style: "currency",
+    currency: currency.india.code,
+    maximumFractionDigits: 0,
+  }),
+  intl: new Intl.NumberFormat(currency.intl.locale, {
+    style: "currency",
+    currency: currency.intl.code,
+    maximumFractionDigits: 0,
+  }),
+};
+
 /** "₹2,499" or "$39": Indian digit grouping for rupees, no decimals. */
 export function formatPrice(amount: number, region: Region): string {
-  const { code, locale } = currency[region];
-  const formatter = new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: code,
-    maximumFractionDigits: 0,
-  });
-  return formatter.format(amount);
+  return priceFormatters[region].format(amount);
 }

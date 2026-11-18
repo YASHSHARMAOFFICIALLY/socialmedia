@@ -4,6 +4,7 @@ import { askAi } from "../content";
 import { siteUrl } from "@/lib/site";
 import type { Faq } from "../seo-pages";
 import { BrandGlyph } from "./brand-glyph";
+import { JsonLd } from "@/components/json-ld";
 
 // The pieces every footer-linked page shares (Ribbon guide pages, docs/landing-reference.md §2):
 // "Ask AI about this page", a bottom-line verdict, related pages, and a per-page FAQ with JSON-LD.
@@ -104,7 +105,7 @@ export function PageFaq({ items, path, title }: { items: Faq[]; path: string; ti
           </details>
         ))}
       </div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+      <JsonLd data={structuredData} />
     </section>
   );
 }

@@ -24,8 +24,13 @@ async function post(path: string, body: unknown) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  // Errors carry a JSON body too ({ code, message }); an empty or non-JSON body becomes {}.
+  if (!r.ok) {
+    const error = await r.json().catch(() => ({}));
+    return { ok: false, status: r.status, data: error };
+  }
   const data = await r.json().catch(() => ({}));
-  return { status: r.status, data };
+  return { ok: true, status: r.status, data };
 }
 
 function message(status: number, mode: Mode, code?: string) {
@@ -52,36 +57,53 @@ const readOauthError = () => new URLSearchParams(window.location.search).get("er
 const field = "mt-2 block w-full rounded-xl border border-line bg-white px-3.5 py-3 text-base text-ink placeholder:text-muted/70 focus-visible:border-ink";
 const label = "block text-sm font-medium text-ink";
 
+const NETWORK_ERROR = "Can't reach PostRally right now. Check your connection and try again.";
+
+/** Which endpoint and body a submitted form maps to: sign-up, or log-in by email or by username. */
+function credentialsRequest(form: FormData, signup: boolean): { path: string; body: Record<string, string> } {
+  const password = String(form.get("password"));
+  if (signup) {
+    const username = String(form.get("username")).trim();
+    const email = String(form.get("email")).trim();
+    return { path: "/sign-up/email", body: { name: username, username, email, password } };
+  }
+  const id = String(form.get("identifier")).trim();
+  if (id.includes("@")) {
+    return { path: "/sign-in/email", body: { email: id, password } };
+  }
+  return { path: "/sign-in/username", body: { username: id, password } };
+}
+
+function submitLabel(busy: boolean, signup: boolean): string {
+  if (busy) {
+    return signup ? "Creating account…" : "Logging in…";
+  }
+  return signup ? "Create account" : "Log in";
+}
+
 export function AuthForm({ mode }: { mode: Mode }) {
   const [busy, setBusy] = useState<"form" | Provider | null>(null);
   const [formError, setError] = useState<string | null>(null);
   const oauthError = useSyncExternalStore(noSubscribe, readOauthError, () => null);
-  const error = formError ?? (oauthError && busy === null ? oauthMessage(oauthError) : null);
+  const showOauthError = oauthError !== null && busy === null;
+  const error = formError ?? (showOauthError ? oauthMessage(oauthError) : null);
   const [notice, setNotice] = useState<string | null>(null);
   const signup = mode === "signup";
   const router = useRouter();
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const password = String(f.get("password"));
+    const { path, body } = credentialsRequest(new FormData(e.currentTarget), signup);
     setBusy("form");
     setError(null);
     try {
-      let res;
-      if (signup) {
-        const username = String(f.get("username")).trim();
-        res = await post("/sign-up/email", { name: username, username, email: String(f.get("email")).trim(), password });
-      } else {
-        const id = String(f.get("identifier")).trim();
-        res = id.includes("@") ? await post("/sign-in/email", { email: id, password }) : await post("/sign-in/username", { username: id, password });
-      }
-      if (res.status >= 400) return setError(message(res.status, mode, res.data?.code));
+      const res = await post(path, body);
+      if (!res.ok) return setError(message(res.status, mode, res.data?.code));
       // Sign-up with required email verification returns no session: tell them to check the inbox.
       if (signup && !res.data?.token) return setNotice("Check your inbox and open the link we sent to finish signing up.");
       router.push(AFTER_AUTH);
     } catch {
-      setError("Can't reach PostRally right now. Check your connection and try again.");
+      setError(NETWORK_ERROR);
     } finally {
       setBusy(null);
     }
@@ -92,51 +114,34 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setError(null);
     try {
       const { origin, pathname } = window.location;
-      const res = await post("/sign-in/social", { provider, callbackURL: `${origin}${AFTER_AUTH}`, errorCallbackURL: `${origin}${pathname}` });
-      if (res.status >= 400 || !res.data?.url) return setError(`${PROVIDER_NAME[provider]} sign-in isn't available right now. Use your email or username instead.`);
+      const res = await post("/sign-in/social", {
+        provider,
+        callbackURL: `${origin}${AFTER_AUTH}`,
+        errorCallbackURL: `${origin}${pathname}`,
+      });
+      if (!res.ok || !res.data?.url) {
+        return setError(`${PROVIDER_NAME[provider]} sign-in isn't available right now. Use your email or username instead.`);
+      }
       window.location.assign(res.data.url);
     } catch {
-      setError("Can't reach PostRally right now. Check your connection and try again.");
+      setError(NETWORK_ERROR);
     } finally {
       setBusy(null);
     }
   }
 
   if (notice) {
-    return (
-      <div aria-live="polite">
-        <h1 className="font-heading text-heading text-ink">Check your inbox</h1>
-        <p className="mt-4 text-base text-muted">{notice}</p>
-        <Link href="/login" className="mt-8 inline-flex min-h-11 items-center text-sm font-semibold text-ink underline underline-offset-4">
-          Back to log in
-        </Link>
-      </div>
-    );
+    return <CheckInbox notice={notice} />;
   }
 
   return (
     <div>
       <h1 className="font-heading text-heading text-ink">{signup ? "Create your account" : "Welcome back"}</h1>
-      <p className="mt-3 text-base text-muted">{signup ? "Write once, post everywhere. It takes a minute." : "Log in to schedule, publish and check your posts."}</p>
+      <p className="mt-3 text-base text-muted">
+        {signup ? "Write once, post everywhere. It takes a minute." : "Log in to schedule, publish and check your posts."}
+      </p>
 
-      <button type="button" onClick={() => social("google")} disabled={busy !== null} className={`mt-8 ${socialButton}`}>
-        <svg aria-hidden viewBox="0 0 24 24" className="size-5">
-          <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z" />
-          <path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.1-4 1.1-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24Z" />
-          <path fill="#FBBC05" d="M5.4 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
-          <path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A11.9 11.9 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8Z" />
-        </svg>
-        {busy === "google" ? "Opening Google…" : "Continue with Google"}
-      </button>
-      <button type="button" onClick={() => social("microsoft")} disabled={busy !== null} className={`mt-3 ${socialButton}`}>
-        <svg aria-hidden viewBox="0 0 24 24" className="size-5">
-          <path fill="#F25022" d="M1 1h10.5v10.5H1z" />
-          <path fill="#7FBA00" d="M12.5 1H23v10.5H12.5z" />
-          <path fill="#00A4EF" d="M1 12.5h10.5V23H1z" />
-          <path fill="#FFB900" d="M12.5 12.5H23V23H12.5z" />
-        </svg>
-        {busy === "microsoft" ? "Opening Microsoft…" : "Continue with Microsoft"}
-      </button>
+      <SocialButtons busy={busy} onPick={social} />
 
       <div className="my-7 flex items-center gap-4 text-xs text-muted">
         <span className="h-px flex-1 bg-line" />
@@ -145,37 +150,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       </div>
 
       <form onSubmit={submit} className="space-y-5">
-        {signup ? (
-          <>
-            <div>
-              <label htmlFor="username" className={label}>
-                Username
-              </label>
-              <input id="username" name="username" required minLength={3} maxLength={30} pattern="[A-Za-z0-9_.]{3,30}" autoComplete="username" className={field} />
-              <p className="mt-1.5 text-xs text-muted">3 to 30 letters, numbers, dots or underscores.</p>
-            </div>
-            <div>
-              <label htmlFor="email" className={label}>
-                Email
-              </label>
-              <input id="email" name="email" type="email" required autoComplete="email" className={field} />
-            </div>
-          </>
-        ) : (
-          <div>
-            <label htmlFor="identifier" className={label}>
-              Email or username
-            </label>
-            <input id="identifier" name="identifier" required autoComplete="username" className={field} />
-          </div>
-        )}
-        <div>
-          <label htmlFor="password" className={label}>
-            Password
-          </label>
-          <input id="password" name="password" type="password" required minLength={signup ? 10 : 1} maxLength={128} autoComplete={signup ? "new-password" : "current-password"} className={field} />
-          {signup && <p className="mt-1.5 text-xs text-muted">At least 10 characters.</p>}
-        </div>
+        <CredentialFields signup={signup} />
 
         {error && (
           <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800">
@@ -183,18 +158,118 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </p>
         )}
 
-        <button type="submit" disabled={busy !== null} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-ink text-sm font-semibold text-white transition-colors hover:bg-ink/85 disabled:opacity-60">
-          {busy === "form" ? (signup ? "Creating account…" : "Logging in…") : signup ? "Create account" : "Log in"}
+        <button
+          type="submit"
+          disabled={busy !== null}
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-ink text-sm font-semibold text-white transition-colors hover:bg-ink/85 disabled:opacity-60"
+        >
+          {submitLabel(busy === "form", signup)}
         </button>
       </form>
 
       <p className="mt-8 text-sm text-muted">
         {signup ? "Already have an account? " : "New to PostRally? "}
-        <Link href={signup ? "/login" : "/signup"} className="inline-flex min-h-11 items-center font-semibold text-ink underline decoration-line underline-offset-4 hover:decoration-ink">
+        <Link
+          href={signup ? "/login" : "/signup"}
+          className="inline-flex min-h-11 items-center font-semibold text-ink underline decoration-line underline-offset-4 hover:decoration-ink"
+        >
           {signup ? "Log in" : "Create an account"}
         </Link>
       </p>
     </div>
+  );
+}
+
+function CheckInbox({ notice }: { notice: string }) {
+  return (
+    <div aria-live="polite">
+      <h1 className="font-heading text-heading text-ink">Check your inbox</h1>
+      <p className="mt-4 text-base text-muted">{notice}</p>
+      <Link href="/login" className="mt-8 inline-flex min-h-11 items-center text-sm font-semibold text-ink underline underline-offset-4">
+        Back to log in
+      </Link>
+    </div>
+  );
+}
+
+function SocialButtons({ busy, onPick }: { busy: "form" | Provider | null; onPick: (p: Provider) => void }) {
+  return (
+    <>
+      <button type="button" onClick={() => onPick("google")} disabled={busy !== null} className={`mt-8 ${socialButton}`}>
+        <svg aria-hidden viewBox="0 0 24 24" className="size-5">
+          <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z" />
+          <path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.1-4 1.1-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24Z" />
+          <path fill="#FBBC05" d="M5.4 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
+          <path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A11.9 11.9 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8Z" />
+        </svg>
+        {busy === "google" ? "Opening Google…" : "Continue with Google"}
+      </button>
+      <button type="button" onClick={() => onPick("microsoft")} disabled={busy !== null} className={`mt-3 ${socialButton}`}>
+        <svg aria-hidden viewBox="0 0 24 24" className="size-5">
+          <path fill="#F25022" d="M1 1h10.5v10.5H1z" />
+          <path fill="#7FBA00" d="M12.5 1H23v10.5H12.5z" />
+          <path fill="#00A4EF" d="M1 12.5h10.5V23H1z" />
+          <path fill="#FFB900" d="M12.5 12.5H23V23H12.5z" />
+        </svg>
+        {busy === "microsoft" ? "Opening Microsoft…" : "Continue with Microsoft"}
+      </button>
+    </>
+  );
+}
+
+function CredentialFields({ signup }: { signup: boolean }) {
+  return (
+    <>
+      {signup ? (
+        <>
+          <div>
+            <label htmlFor="username" className={label}>
+              Username
+            </label>
+            <input
+              id="username"
+              name="username"
+              required
+              minLength={3}
+              maxLength={30}
+              pattern="[A-Za-z0-9_.]{3,30}"
+              autoComplete="username"
+              className={field}
+            />
+            <p className="mt-1.5 text-xs text-muted">3 to 30 letters, numbers, dots or underscores.</p>
+          </div>
+          <div>
+            <label htmlFor="email" className={label}>
+              Email
+            </label>
+            <input id="email" name="email" type="email" required autoComplete="email" className={field} />
+          </div>
+        </>
+      ) : (
+        <div>
+          <label htmlFor="identifier" className={label}>
+            Email or username
+          </label>
+          <input id="identifier" name="identifier" required autoComplete="username" className={field} />
+        </div>
+      )}
+      <div>
+        <label htmlFor="password" className={label}>
+          Password
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          required
+          minLength={signup ? 10 : 1}
+          maxLength={128}
+          autoComplete={signup ? "new-password" : "current-password"}
+          className={field}
+        />
+        {signup && <p className="mt-1.5 text-xs text-muted">At least 10 characters.</p>}
+      </div>
+    </>
   );
 }
 
