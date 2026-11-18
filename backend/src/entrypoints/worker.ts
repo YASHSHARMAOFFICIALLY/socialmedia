@@ -58,8 +58,10 @@ export default {
       await beat(db, "scheduling").catch((err) => log.error({ err }, "heartbeat failed"));
       // Each job family is isolated (a failure or slowness in one never stops another) and ALL are awaited: work left un-awaited
       // after this promise settles would be cancelled by the runtime.
-      const [publishing] = await Promise.all([
-        engine.sweep().catch((err) => { log.error({ err }, "sweep failed"); return null; }),
+      // Publishing runs first and alone: a Worker has only 6 database connections, and the other sweeps
+      // must not make the posts that are due wait for one.
+      const publishing = await engine.sweep().catch((err) => { log.error({ err }, "sweep failed"); return null; });
+      await Promise.all([
         engine.analytics.sweep().catch((err) => log.error({ err }, "analytics sweep failed")),
         engine.reports.sweep().catch((err) => log.error({ err }, "report sweep failed")),
         engine.notifications.sweep().catch((err) => log.error({ err }, "notification sweep failed")),
