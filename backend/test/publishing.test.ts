@@ -200,6 +200,52 @@ describe("publishing engine", async () => {
       expect(li.calls).toHaveLength(1);
     });
 
+    it("a lost recording keeps the external id, so even a platform that cannot be queried ends 'published'", async () => {
+      const li = createFakeAdapter("linkedin", () => ok("live-2"));   // no reconcile (LinkedIn, Pinterest, TikTok, Telegram)
+      const t = await mk([li]);
+      const { owner, ws, post } = await world(t);
+      await publish(owner, ws, post);
+      await t.db.query("CREATE FUNCTION boom2() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'connection terminated'; END $$ LANGUAGE plpgsql");
+      await t.db.query("CREATE TRIGGER boom2 BEFORE INSERT ON billing_usage_events FOR EACH ROW EXECUTE FUNCTION boom2()");
+      expect(await drain(t)).toEqual(["reconciling"]);
+      await t.db.query("DROP TRIGGER boom2 ON billing_usage_events");
+      await t.deps.engine.sweep();
+      expect((await jobs(t, ws))[0]).toMatchObject({ status: "published", external_id: "live-2" });
+      expect(li.calls).toHaveLength(1);
+    });
+
+    it("a non-platform error from publish (e.g. a JSON parse of an empty 200) is 'unknown', never a retryable failure", async () => {
+      const li = createFakeAdapter("linkedin", () => { throw new SyntaxError("Unexpected end of JSON input"); }, { reconcile: async () => ({ externalId: "it-was-live" }) });
+      const t = await mk([li]);
+      const { owner, ws, post } = await world(t);
+      await publish(owner, ws, post);
+      expect(await drain(t)).toEqual(["reconciling"]);
+      await t.deps.engine.sweep();
+      expect((await jobs(t, ws))[0]).toMatchObject({ status: "published", external_id: "it-was-live" });
+    });
+
+    it("reconcile never confirms with an older identical post or an id another job already owns", async () => {
+      const seen: { since: Date; exclude?: string[] | undefined }[] = [];
+      const li = createFakeAdapter("linkedin", () => { throw new PlatformError("unknown", "timeout"); }, {
+        reconcile: async (i) => { seen.push({ since: i.since, exclude: i.exclude }); return null; },
+      });
+      const t = await mk([li]);
+      const { owner, ws, post } = await world(t);
+      const id = (await publish(owner, ws, post)).body.data.jobs[0].id;
+      // Recurring posts are created a day ahead; another job on this account already owns "yesterday".
+      await t.db.query("UPDATE publishing_jobs SET created_at = now() - interval '1 day' WHERE id = $1", [id]);
+      const other = await t.db.query<{ id: string }>(
+        `INSERT INTO publishing_jobs (workspace_id, post_id, variant_id, social_account_id, platform, status, next_attempt_at, created_by, idempotency_key, external_id)
+         SELECT workspace_id, post_id, variant_id, social_account_id, platform, 'failed', now(), created_by, 'other-key', 'yesterday' FROM publishing_jobs WHERE id = $1 RETURNING id`, [id]);
+      expect(other.rows).toHaveLength(1);
+      const before = Date.now();
+      await drain(t);
+      await t.deps.engine.sweep();
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.since.getTime()).toBeGreaterThan(before - 5 * 60_000);   // the current attempt, not created_at - 60s
+      expect(seen[0]!.exclude).toEqual(["yesterday"]);
+    });
+
     it("keeps looking until the window passes, then fails as 'unconfirmed' (no auto-retry); manual retry warns about a possible duplicate", async () => {
       const li = createFakeAdapter("linkedin", () => { throw new PlatformError("unknown", "socket hang up"); }, { reconcile: async () => null });
       const t = await mk([li]);

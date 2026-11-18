@@ -53,6 +53,8 @@ export interface PublicPost { externalId: string; publishedAt: Date; url?: strin
 export interface CredentialField { name: string; label: string; secret: boolean; help?: string }
 export interface ConnectedAccount { profile: AccountProfile; tokens: OAuthTokens }
 
+export type ReconcileInput = Pick<PublishInput, "accessToken" | "account" | "content" | "idempotencyKey"> & { since: Date; exclude?: string[] };
+
 export interface SocialAdapter {
   readonly platform: Platform;
   readonly capabilities: Capabilities;
@@ -72,7 +74,8 @@ export interface SocialAdapter {
   /** Present only when publishing is implemented. Errors MUST be PlatformError; a failure after the creating request was sent is kind "unknown". */
   publish?(i: PublishInput): Promise<PublishResult>;
   /** Present only when the platform lets us look up our own recent posts: resolves "unknown" outcomes. Returns null if no matching post exists. */
-  reconcile?(i: Pick<PublishInput, "accessToken" | "account" | "content" | "idempotencyKey"> & { since: Date }): Promise<PublishResult | null>;
+  /** `since` is the start of the unknown attempt; `exclude` holds external ids already recorded on other jobs of this account. */
+  reconcile?(i: ReconcileInput): Promise<PublishResult | null>;
   /** Competitor intelligence: PUBLIC data about another account via the official API, using the workspace's own connected account's token. */
   lookupPublicProfile?(i: { accessToken: string; handle: string }): Promise<PublicProfile>;
   fetchPublicPosts?(i: { accessToken: string; profile: Pick<PublicProfile, "externalId" | "handle" | "uploadsPlaylistId">; limit: number }): Promise<PublicPost[]>;

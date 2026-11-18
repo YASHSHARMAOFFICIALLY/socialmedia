@@ -1,3 +1,4 @@
+import { matchRecentPost } from "../core/reconcile.js";
 import { PlatformError } from "../core/errors.js";
 import { metaFetch } from "../core/http.js";
 import { withHashtags } from "../core/rules.js";
@@ -97,11 +98,13 @@ export function createThreadsAdapter(cfg: { clientId: string; clientSecret: stri
       } catch { /* ignore */ }
       return { externalId: published.id, ...(url ? { url } : {}), raw: { id: published.id } };
     },
-    async reconcile({ accessToken, account, content, since }) {
-      const r = await metaFetch(f, "threads", `${API}/${account.externalId}/threads?fields=id,text,timestamp,permalink&limit=10`, { headers: auth(accessToken) });
-      const want = withHashtags(content).trim();
-      const hit = ((await r.json()) as { data?: { id: string; text?: string; timestamp?: string; permalink?: string }[] }).data?.find((p) => (p.text ?? "").trim() === want && (!p.timestamp || new Date(p.timestamp) >= since));
-      return hit ? { externalId: hit.id, ...(hit.permalink ? { url: hit.permalink } : {}) } : null;
+    async reconcile({ accessToken, account, content, since, exclude = [] }) {
+      const url = `${API}/${account.externalId}/threads?fields=id,text,timestamp,permalink&limit=10`;
+      const r = await metaFetch(f, "threads", url, { headers: auth(accessToken) });
+      const body = (await r.json()) as { data?: { id: string; text?: string; timestamp?: string; permalink?: string }[] };
+      const posts = (body.data ?? []).map((p) => ({ id: p.id, text: p.text ?? "", at: p.timestamp, url: p.permalink }));
+      const hit = matchRecentPost(posts, withHashtags(content), since, exclude);
+      return hit ? { externalId: hit.id, ...(hit.url ? { url: hit.url } : {}) } : null;
     },
     async fetchPostMetrics({ accessToken, externalPostId }): Promise<MetricsResult> {
       const source = `${API}/${externalPostId}/insights?metric=${POST_METRICS.join(",")}`;

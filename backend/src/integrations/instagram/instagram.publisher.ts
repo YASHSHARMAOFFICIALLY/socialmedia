@@ -1,3 +1,4 @@
+import { matchRecentPost } from "../core/reconcile.js";
 import { PlatformError } from "../core/errors.js";
 import { metaFetch } from "../core/http.js";
 import { withHashtags } from "../core/rules.js";
@@ -68,11 +69,12 @@ export function createInstagramPublisher(f: typeof fetch = fetch, o: { pollMs?: 
 
 /** Lists the account's most recent media (IG User media edge) and matches on caption + time. */
 export function createInstagramReconciler(f: typeof fetch = fetch): NonNullable<SocialAdapter["reconcile"]> {
-  return async ({ accessToken, account, content, since }) => {
-    const res = await metaFetch(f, "instagram", `${GRAPH}/${account.externalId}/media?fields=id,caption,timestamp,permalink&limit=10`, { headers: bearer(accessToken) });
-    const items = ((await res.json()) as { data?: { id: string; caption?: string; timestamp?: string; permalink?: string }[] }).data ?? [];
-    const want = withHashtags(content).trim();
-    const hit = items.find((m) => (m.caption ?? "").trim() === want && (!m.timestamp || new Date(m.timestamp) >= since));
-    return hit ? { externalId: hit.id, ...(hit.permalink ? { url: hit.permalink } : {}) } : null;
+  return async ({ accessToken, account, content, since, exclude = [] }) => {
+    const url = `${GRAPH}/${account.externalId}/media?fields=id,caption,timestamp,permalink&limit=10`;
+    const res = await metaFetch(f, "instagram", url, { headers: bearer(accessToken) });
+    const body = (await res.json()) as { data?: { id: string; caption?: string; timestamp?: string; permalink?: string }[] };
+    const posts = (body.data ?? []).map((m) => ({ id: m.id, text: m.caption ?? "", at: m.timestamp, url: m.permalink }));
+    const hit = matchRecentPost(posts, withHashtags(content), since, exclude);
+    return hit ? { externalId: hit.id, ...(hit.url ? { url: hit.url } : {}) } : null;
   };
 }

@@ -1,3 +1,4 @@
+import { matchRecentPost } from "../core/reconcile.js";
 import { PlatformError, classifyHttp, retryAfterSeconds } from "../core/errors.js";
 import type { PublishInput, PublishResult, SocialAdapter } from "../core/types.js";
 
@@ -107,14 +108,14 @@ export function createYouTubePublisher(f: typeof fetch = fetch, o: { maxResumes?
 
 /** Looks at the channel's uploads playlist (cheap list call) for a video we just tried to upload. */
 export function createYouTubeReconciler(f: typeof fetch = fetch): NonNullable<SocialAdapter["reconcile"]> {
-  return async ({ accessToken, account, content, since }) => {
+  return async ({ accessToken, account, content, since, exclude = [] }) => {
     const playlist = account.metadata.uploadsPlaylistId as string | null | undefined;
     if (!playlist || !content.title) return null;
     const res = await f(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=10&playlistId=${encodeURIComponent(playlist)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw await toYouTubeError(res, false);
     const items = ((await res.json()) as { items?: { snippet?: { title?: string; publishedAt?: string; resourceId?: { videoId?: string } } }[] }).items ?? [];
-    const hit = items.find((it) => it.snippet?.title === content.title && it.snippet.publishedAt && new Date(it.snippet.publishedAt) >= since);
-    const id = hit?.snippet?.resourceId?.videoId;
+    const posts = items.map((it) => ({ id: it.snippet?.resourceId?.videoId ?? "", text: it.snippet?.title ?? "", at: it.snippet?.publishedAt }));
+    const id = matchRecentPost(posts.filter((p) => p.id), content.title, since, exclude)?.id;
     return id ? { externalId: id, url: `https://www.youtube.com/watch?v=${id}` } : null;
   };
 }

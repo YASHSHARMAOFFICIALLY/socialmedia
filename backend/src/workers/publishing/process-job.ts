@@ -80,7 +80,8 @@ export async function processPublishJob(deps: EngineDeps, jobId: string): Promis
   let result: PublishResult;
   try {
     const { adapter, input } = await buildPublishInput(deps, job);
-    result = await withTimeout((signal) => adapter.publish!({ ...input, signal }), deps.timeoutMs ?? TIMEOUT_MS);
+    result = await withTimeout((signal) => adapter.publish!({ ...input, signal }), deps.timeoutMs ?? TIMEOUT_MS)
+      .catch((err: unknown) => { throw asPublishError(err); });
   } catch (err) {
     return handleFailure(deps, job, err);
   }
@@ -101,12 +102,22 @@ export async function processPublishJob(deps: EngineDeps, jobId: string): Promis
     log.error({ jobId, externalId: result.externalId, err: err instanceof Error ? err.message : String(err) }, "published but could not record it; handing to reconciliation");
     // Best effort; if even this fails the lease expires and the sweeper reconciles the job.
     await db.tx(async (q) => {
-      if (await repo.markUnknown(q, job, "published on the platform but recording failed")) await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "processing", reason: `published (external id ${result.externalId}) but recording failed; awaiting reconciliation` });
+      if (await repo.markUnknown(q, job, "published on the platform but recording failed", result)) await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "processing", reason: `published (external id ${result.externalId}) but recording failed; awaiting reconciliation` });
     }).catch(() => {});
     return "reconciling";
   }
   if (!ok) { log.error({ jobId, externalId: result.externalId }, "published but lease was lost; reconciliation will confirm"); return "lease_lost"; }
   return "published";
+}
+
+/**
+ * Adapters must throw PlatformError. Anything else escaped after the creating request may have been sent
+ * (e.g. JSON parse of an empty 200), so it is "unknown" (reconcile), never "permanent" (a retry would duplicate).
+ */
+function asPublishError(err: unknown): unknown {
+  if (err instanceof PlatformError) return err;
+  const message = err instanceof Error ? err.message : String(err);
+  return new PlatformError("unknown", `Unexpected error while publishing: ${message}`);
 }
 
 async function handleFailure(deps: EngineDeps, job: JobRow, err: unknown): Promise<ProcessResult> {

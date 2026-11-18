@@ -87,10 +87,13 @@ export const publishingRepository = {
       `UPDATE publishing_jobs SET status = 'failed', lease_token = NULL, lease_until = NULL, needs_reconciliation = false, failure_kind = $3, failure_message = $4,
          dead_lettered_at = CASE WHEN $3 = 'exhausted' THEN now() ELSE dead_lettered_at END
         WHERE id = $1 AND lease_token = $2 AND status = 'processing'`, [j.id, j.lease_token, kind, message.slice(0, 1000)])).rowCount,
-  markUnknown: async (q: Queryable, j: JobRow, message: string) =>
+  /** `live` is set when the platform accepted the post but recording it failed: the reconciler then confirms it without asking the platform. */
+  markUnknown: async (q: Queryable, j: JobRow, message: string, live?: { externalId: string; url?: string | undefined }) =>
     (await q.query(
-      `UPDATE publishing_jobs SET needs_reconciliation = true, unknown_since = COALESCE(unknown_since, now()), lease_until = NULL, failure_message = $3
-        WHERE id = $1 AND lease_token = $2 AND status = 'processing'`, [j.id, j.lease_token, message.slice(0, 1000)])).rowCount,
+      `UPDATE publishing_jobs SET needs_reconciliation = true, unknown_since = COALESCE(unknown_since, now()), lease_until = NULL, failure_message = $3,
+         external_id = COALESCE($4, external_id), external_url = COALESCE($5, external_url)
+        WHERE id = $1 AND lease_token = $2 AND status = 'processing'`,
+      [j.id, j.lease_token, message.slice(0, 1000), live?.externalId ?? null, live?.url ?? null])).rowCount,
 
   // ---- sweeper
   dueOutbox: (q: Queryable, limit: number) =>
@@ -120,6 +123,22 @@ export const publishingRepository = {
   /** Reconciler takes ownership of an unknown-outcome job by setting a short lease (prevents concurrent reconcilers). */
   leaseForReconcile: async (q: Queryable, jobId: string, token: string, seconds: number) =>
     (await q.query<JobRow>(`UPDATE publishing_jobs SET lease_token = $2, lease_until = now() + make_interval(secs => $3) WHERE id = $1 AND status = 'processing' AND needs_reconciliation AND lease_until IS NULL RETURNING ${ALL}`, [jobId, token, seconds])).rows[0] ?? null,
+  /**
+   * What the reconciler may match: posts created since the unknown attempt started (minus clock skew), excluding
+   * external ids other jobs of this account already own. Falls back to created_at when the attempt row is missing.
+   */
+  reconcileScope: async (q: Queryable, j: JobRow) =>
+    (await q.query<{ since: string; taken: string[] }>(
+      `SELECT COALESCE(
+                (SELECT started_at FROM publishing_attempts WHERE job_id = $1 AND attempt_no = $2),
+                $5::timestamptz
+              ) - interval '60 seconds' AS since,
+              ARRAY(
+                SELECT external_id FROM publishing_jobs
+                 WHERE workspace_id = $3 AND social_account_id = $4 AND id <> $1 AND external_id IS NOT NULL
+                 ORDER BY created_at DESC LIMIT 100
+              ) AS taken`,
+      [j.id, j.attempt_count, j.workspace_id, j.social_account_id, j.created_at])).rows[0]!,
   releaseReconcileLease: (q: Queryable, jobId: string, token: string) =>
     q.query("UPDATE publishing_jobs SET lease_until = NULL WHERE id = $1 AND lease_token = $2 AND status = 'processing'", [jobId, token]),
   /** Reconciler markers use the same fenced finishers; this resets the lease_token expectations. */
@@ -145,7 +164,7 @@ export const publishingRepository = {
          FROM scheduled_posts s WHERE s.workspace_id = $1 AND s.post_id = $2`, [workspaceId, postId])).rows[0] ?? null,
   /** Jobs still waiting for their time (not yet claimed/queued). */
   scheduledJobs: async (q: Queryable, workspaceId: string, postId: string) =>
-    (await q.query<{ id: string; social_account_id: string }>("SELECT id, social_account_id FROM publishing_jobs WHERE workspace_id = $1 AND post_id = $2 AND status = 'scheduled' AND next_attempt_at > now() FOR UPDATE", [workspaceId, postId])).rows,
+    (await q.query<{ id: string; social_account_id: string; next_attempt_at: string }>("SELECT id, social_account_id, next_attempt_at FROM publishing_jobs WHERE workspace_id = $1 AND post_id = $2 AND status = 'scheduled' AND next_attempt_at > now() FOR UPDATE", [workspaceId, postId])).rows,
   moveScheduled: async (q: Queryable, workspaceId: string, jobIds: string[], at: Date) =>
     (await q.query<{ id: string }>("UPDATE publishing_jobs SET next_attempt_at = $3, last_enqueued_at = NULL WHERE workspace_id = $1 AND id = ANY($2::uuid[]) AND status = 'scheduled' RETURNING id", [workspaceId, jobIds, at.toISOString()])).rows.map((r) => r.id),
   cancelScheduled: async (q: Queryable, workspaceId: string, jobIds: string[]) =>

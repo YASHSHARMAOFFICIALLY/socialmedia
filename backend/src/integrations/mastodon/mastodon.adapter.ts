@@ -1,3 +1,4 @@
+import { matchRecentPost } from "../core/reconcile.js";
 import { PlatformError } from "../core/errors.js";
 import { apiFetch } from "../core/http.js";
 import { chars, withHashtags } from "../core/rules.js";
@@ -21,7 +22,6 @@ export function instanceOrigin(input: string): string {
 }
 
 const stripHtml = (s: string) => s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>\s*<p>/gi, "\n\n").replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
-const norm = (s: string) => s.replace(/\s+/g, "");
 
 export function createMastodonAdapter(cfg: { pollMs?: number } = {}, f: typeof fetch = fetch): SocialAdapter {
   const pollMs = cfg.pollMs ?? 2000;
@@ -88,11 +88,12 @@ export function createMastodonAdapter(cfg: { pollMs?: number } = {}, f: typeof f
       const s = (await res.json()) as { id: string; url?: string };
       return { externalId: s.id, ...(s.url ? { url: s.url } : {}), raw: s };
     },
-    async reconcile({ accessToken, account, content, since }) {
-      const base = origin(account);
-      const res = await apiFetch(f, "mastodon", `${base}/api/v1/accounts/${account.metadata.accountId}/statuses?limit=20`, { headers: auth(accessToken) });
-      const want = norm(withHashtags(content));
-      const hit = ((await res.json()) as { id: string; url?: string; content: string; created_at: string }[]).find((s) => new Date(s.created_at) >= since && norm(stripHtml(s.content)) === want);
+    async reconcile({ accessToken, account, content, since, exclude = [] }) {
+      const url = `${origin(account)}/api/v1/accounts/${account.metadata.accountId}/statuses?limit=20`;
+      const res = await apiFetch(f, "mastodon", url, { headers: auth(accessToken) });
+      const statuses = (await res.json()) as { id: string; url?: string; content: string; created_at: string }[];
+      const posts = statuses.map((s) => ({ id: s.id, text: stripHtml(s.content), at: s.created_at, url: s.url }));
+      const hit = matchRecentPost(posts, withHashtags(content), since, exclude);
       return hit ? { externalId: hit.id, ...(hit.url ? { url: hit.url } : {}) } : null;
     },
     async fetchPostMetrics({ accessToken, account, externalPostId }) {

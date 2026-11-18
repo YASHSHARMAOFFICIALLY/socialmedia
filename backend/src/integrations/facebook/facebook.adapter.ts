@@ -1,3 +1,4 @@
+import { matchRecentPost } from "../core/reconcile.js";
 import { PlatformError } from "../core/errors.js";
 import { metaFetch } from "../core/http.js";
 import { withHashtags } from "../core/rules.js";
@@ -108,11 +109,13 @@ export function createFacebookAdapter(cfg: { clientId: string; clientSecret: str
       const ins = await insights(accessToken, `${GRAPH}/${account.externalId}/insights?${new URLSearchParams({ metric: "page_follows,page_media_view", period: "day" })}`);
       return { source: "page insights", raw: ins, metrics: [num("page_follows", ins.page_follows), { ...num("page_media_view", ins.page_media_view), period: "day" as const }] };
     },
-    async reconcile({ accessToken, account, content, since }) {
-      const r = await metaFetch(f, "facebook", `${GRAPH}/${account.externalId}/posts?fields=id,message,created_time,permalink_url&limit=10`, { headers: auth(accessToken) });
-      const want = withHashtags(content).trim();
-      const hit = ((await r.json()) as { data?: { id: string; message?: string; created_time?: string; permalink_url?: string }[] }).data?.find((p) => (p.message ?? "").trim() === want && (!p.created_time || new Date(p.created_time) >= since));
-      return hit ? { externalId: hit.id, ...(hit.permalink_url ? { url: hit.permalink_url } : {}) } : null;
+    async reconcile({ accessToken, account, content, since, exclude = [] }) {
+      const url = `${GRAPH}/${account.externalId}/posts?fields=id,message,created_time,permalink_url&limit=10`;
+      const r = await metaFetch(f, "facebook", url, { headers: auth(accessToken) });
+      const body = (await r.json()) as { data?: { id: string; message?: string; created_time?: string; permalink_url?: string }[] };
+      const posts = (body.data ?? []).map((p) => ({ id: p.id, text: p.message ?? "", at: p.created_time, url: p.permalink_url }));
+      const hit = matchRecentPost(posts, withHashtags(content), since, exclude);
+      return hit ? { externalId: hit.id, ...(hit.url ? { url: hit.url } : {}) } : null;
     },
   };
 }

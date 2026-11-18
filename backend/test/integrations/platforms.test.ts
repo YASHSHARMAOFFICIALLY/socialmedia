@@ -79,6 +79,23 @@ describe("X adapter (mocked API)", () => {
     expect(hit).toEqual({ externalId: "9" });
     expect(await ad(harness(() => Response.json({ data: [] })).f).reconcile!({ accessToken: "T", account: { externalId: "u1", metadata: {} }, content: content(), idempotencyKey: "k", since: new Date() })).toBeNull();
   });
+  it("reconcile matches a tweet whose link X rewrote to t.co, and skips ids other jobs already own", async () => {
+    const now = new Date().toISOString();
+    const tweets = [
+      { id: "taken", text: "See https://t.co/a1", created_at: now },
+      { id: "10", text: "See https://t.co/b2", created_at: now },
+    ];
+    const h = harness(() => Response.json({ data: tweets }));
+    const hit = await ad(h.f).reconcile!({
+      accessToken: "T",
+      account: { externalId: "u1", metadata: {} },
+      content: content({ text: "See https://example.com/x" }),
+      idempotencyKey: "k",
+      since: new Date(Date.now() - 60_000),
+      exclude: ["taken"],
+    });
+    expect(hit).toEqual({ externalId: "10" });
+  });
   it("threads: each further tweet replies to the previous; a mid-thread failure keeps the post successful with a warning (never re-published)", async () => {
     let n = 0;
     const h = harness((c) => (c.url.endsWith("/tweets") ? Response.json({ data: { id: `T${++n}` } }, { status: 201 }) : Response.json({})));

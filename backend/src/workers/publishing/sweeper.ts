@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PlatformError } from "../../integrations/core/errors.js";
+import type { PublishResult } from "../../integrations/core/types.js";
 import type { Queryable } from "../../infrastructure/database/db.js";
 import type { JobQueue } from "../../infrastructure/queues/queue.js";
 import { publishingRepository as repo, type JobRow } from "../../modules/publishing/publishing.repository.js";
@@ -32,20 +33,34 @@ async function reconcileOne(deps: EngineDeps, found: JobRow & { unknown_age_s: n
       }
       return "failed" as const;
     });
+  const confirm = async (hit: PublishResult, how: string) => {
+    await db.tx(async (q) => {
+      if (await repo.markPublished(q, job, hit)) {
+        await repo.recordPublishedUsage(q, job);
+        await repo.finishAttempt(q, job, "success", { response: hit.raw, message: `confirmed by ${how}` });
+        await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "published", reason: `reconciled: ${how} ${hit.externalId}` });
+      }
+    });
+    return "published" as const;
+  };
+  // The platform accepted the post but recording it failed: the id is already known, no lookup needed.
+  if (job.external_id) {
+    const known = { externalId: job.external_id, ...(job.external_url ? { url: job.external_url } : {}) };
+    return confirm(known, "recorded external id");
+  }
   try {
     const { adapter, input } = await buildPublishInput(deps, job);
     if (!adapter.reconcile) return unconfirmed("Publication outcome is unknown and this platform cannot be checked. It may already be live: check the account before retrying.");
-    const hit = await adapter.reconcile({ accessToken: input.accessToken, account: input.account, content: input.content, idempotencyKey: input.idempotencyKey, since: new Date(new Date(job.created_at).getTime() - 60_000) });
-    if (hit) {
-      await db.tx(async (q) => {
-        if (await repo.markPublished(q, job, hit)) {
-          await repo.recordPublishedUsage(q, job);
-          await repo.finishAttempt(q, job, "success", { response: hit.raw, message: "confirmed by reconciliation" });
-          await repo.event(q, { jobId: job.id, workspaceId: job.workspace_id, from: "processing", to: "published", reason: `reconciled: found external id ${hit.externalId}` });
-        }
-      });
-      return "published";
-    }
+    const scope = await repo.reconcileScope(db, job);
+    const hit = await adapter.reconcile({
+      accessToken: input.accessToken,
+      account: input.account,
+      content: input.content,
+      idempotencyKey: input.idempotencyKey,
+      since: new Date(scope.since),
+      exclude: scope.taken,
+    });
+    if (hit) return confirm(hit, "found external id");
   } catch (e) {
     if (!(e instanceof PlatformError) || e.kind === "permanent" || e.kind === "auth_expired") { if (found.unknown_age_s >= RECONCILE_WINDOW_S) return unconfirmed(`Could not verify outcome: ${(e as Error).message}`); }
   }

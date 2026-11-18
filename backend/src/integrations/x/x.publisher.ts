@@ -1,3 +1,4 @@
+import { matchRecentPost } from "../core/reconcile.js";
 import { PlatformError, platformFetch } from "../core/errors.js";
 import type { PublishInput, PublishResult, ResolvedMedia, SocialAdapter } from "../core/types.js";
 import { withHashtags } from "../core/rules.js";
@@ -77,11 +78,12 @@ export function createXPublisher(f: typeof fetch = fetch, o: { pollMs?: number }
 
 /** Best effort: needs read access on the app's X API tier; on failure the engine falls back to 'unconfirmed'. */
 export function createXReconciler(f: typeof fetch = fetch): NonNullable<SocialAdapter["reconcile"]> {
-  return async ({ accessToken, account, content, since }) => {
-    const res = await platformFetch(f, "x", `${API}/users/${account.externalId}/tweets?max_results=10&tweet.fields=created_at`, { headers: { Authorization: `Bearer ${accessToken}` } });
-    const tweets = ((await res.json()) as { data?: { id: string; text: string; created_at?: string }[] }).data ?? [];
-    const want = withHashtags(content).trim();
-    const hit = tweets.find((t) => t.text.trim() === want && (!t.created_at || new Date(t.created_at) >= since));
+  return async ({ accessToken, account, content, since, exclude = [] }) => {
+    const url = `${API}/users/${account.externalId}/tweets?max_results=10&tweet.fields=created_at`;
+    const res = await platformFetch(f, "x", url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const body = (await res.json()) as { data?: { id: string; text: string; created_at?: string }[] };
+    const posts = (body.data ?? []).map((t) => ({ id: t.id, text: t.text, at: t.created_at }));
+    const hit = matchRecentPost(posts, withHashtags(content), since, exclude);
     return hit ? { externalId: hit.id } : null;
   };
 }
