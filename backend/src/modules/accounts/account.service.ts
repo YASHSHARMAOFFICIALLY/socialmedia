@@ -193,7 +193,6 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
       await workspaces.authorize(a.id, workspaceId, "accounts:manage");
       const adapter = registry.get(platform);
       if (!adapter.credentials) throw badRequest(`${platform} connects with OAuth, not credentials`);
-      await gate(workspaceId, "connected_accounts");
       for (const f of adapter.credentials.fields) if (!fields[f.name]?.trim()) throw badRequest(`Missing field '${f.name}'`);
       const connected = await adapter.credentials.connect(fields).catch((e: unknown) => {
         if (!(e instanceof PlatformError)) throw e;
@@ -201,7 +200,16 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
         if (e.kind === "auth_expired" || e.kind === "permanent") throw badRequest(`${platform} rejected those credentials. Check them and try again.`);
         throw new AppError(502, "BAD_GATEWAY", `${platform} is not reachable right now. Try again shortly.`);
       });
-      return db.tx((tx) => store(tx, workspaceId, a.id, platform, connected));
+      // Gate after the platform call: only then is the external id known, and re-entering credentials for an
+      // account that is already connected is an update, not a new account. Locked like the OAuth callback.
+      return db.tx(async (tx) => {
+        await tx.query("SELECT 1 FROM workspaces WHERE id = $1 FOR UPDATE", [workspaceId]);   // serialize count-then-insert
+        const known = await tx.query(
+          "SELECT 1 FROM social_accounts WHERE workspace_id = $1 AND platform = $2 AND external_id = $3 AND status <> 'disconnected'",
+          [workspaceId, platform, connected.profile.externalId]);
+        if (!known.rowCount) await gate(workspaceId, "connected_accounts", 1, tx);
+        return store(tx, workspaceId, a.id, platform, connected);
+      });
     },
 
     async list(a: Actor, workspaceId: string, limit: number, cursor?: string) {

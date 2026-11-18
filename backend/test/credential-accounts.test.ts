@@ -101,3 +101,25 @@ describe("credentials-mode and multi-account connect", async () => {
     expect(after[0]!.status).toBe("active");
   });
 });
+
+describe("credentials connect and the connected_accounts limit", async () => {
+  const t = await createTestApp([createBlueskyAdapter({}, fakeBsky)], { env: { BILLING_ENFORCE: "true" } });
+  afterAll(t.close);
+  const connect = (owner: Awaited<ReturnType<typeof t.newUser>>, ws: string) =>
+    owner.agent.post(`/workspaces/${ws}/accounts/connect-credentials`).send({ platform: "bluesky", fields: { identifier: "ada.bsky.social", appPassword: "app-password-secret" } });
+
+  it("re-entering credentials for an account already connected works at the limit; a new one is refused", async () => {
+    sessionOk = true;
+    platformDown = false;
+    const owner = await t.newUser("full");
+    const ws = (await owner.agent.post("/workspaces").send({ name: "W" })).body.data.id as string;
+    expect((await connect(owner, ws)).status).toBe(201);
+    for (const n of [1, 2]) {
+      await t.db.query("INSERT INTO social_accounts (workspace_id, platform, external_id, display_name, account_type, connected_by) VALUES ($1,'bluesky',$2,'x','personal',$3)", [ws, `did:plc:other${n}`, owner.id]);
+    }
+    expect((await connect(owner, ws)).status).toBe(201);                                       // same account (did:plc:ada): an update, not a 4th
+    await t.db.query("UPDATE social_accounts SET status = 'disconnected' WHERE workspace_id = $1 AND external_id = 'did:plc:ada'", [ws]);
+    await t.db.query("INSERT INTO social_accounts (workspace_id, platform, external_id, display_name, account_type, connected_by) VALUES ($1,'bluesky','did:plc:other3','x','personal',$2)", [ws, owner.id]);
+    expect((await connect(owner, ws)).status).toBe(402);                                       // would be a 4th live account
+  });
+});
