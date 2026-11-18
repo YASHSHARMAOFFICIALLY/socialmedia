@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore, type FormEvent } from "react";
+import { safeNext } from "@/lib/safe-next";
 import { apiUrl } from "@/lib/site";
 import { LogoMark } from "../sections/site-header";
 
@@ -52,6 +52,13 @@ function oauthMessage(code: string) {
   return "We couldn't sign you in that way. Try again, or use your email and password.";
 }
 const noSubscribe = () => () => {};
+
+/** Absolute URL to land on after auth: ?next= when it is allowed (e.g. the MCP authorize flow), else home. */
+function afterAuthUrl(): string {
+  const { origin, search } = window.location;
+  const next = new URLSearchParams(search).get("next");
+  return safeNext(next, origin, new URL(apiUrl).origin, `${origin}${AFTER_AUTH}`);
+}
 const readOauthError = () => new URLSearchParams(window.location.search).get("error");
 
 const field = "mt-2 block w-full rounded-xl border border-line bg-white px-3.5 py-3 text-base text-ink placeholder:text-muted/70 focus-visible:border-ink";
@@ -89,7 +96,6 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const error = formError ?? (showOauthError ? oauthMessage(oauthError) : null);
   const [notice, setNotice] = useState<string | null>(null);
   const signup = mode === "signup";
-  const router = useRouter();
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -101,7 +107,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       if (!res.ok) return setError(message(res.status, mode, res.data?.code));
       // Sign-up with required email verification returns no session: tell them to check the inbox.
       if (signup && !res.data?.token) return setNotice("Check your inbox and open the link we sent to finish signing up.");
-      router.push(AFTER_AUTH);
+      window.location.assign(afterAuthUrl());   // may be the API origin (MCP authorize), so not router.push
     } catch {
       setError(NETWORK_ERROR);
     } finally {
@@ -113,11 +119,14 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setBusy(provider);
     setError(null);
     try {
-      const { origin, pathname } = window.location;
+      const { origin, pathname, search } = window.location;
+      const back = new URLSearchParams(search);
+      back.delete("error");   // Better Auth adds a fresh one
+      const query = back.size ? `?${back}` : "";
       const res = await post("/sign-in/social", {
         provider,
-        callbackURL: `${origin}${AFTER_AUTH}`,
-        errorCallbackURL: `${origin}${pathname}`,
+        callbackURL: afterAuthUrl(),
+        errorCallbackURL: `${origin}${pathname}${query}`,   // keeps ?next= for the retry
       });
       if (!res.ok || !res.data?.url) {
         return setError(`${PROVIDER_NAME[provider]} sign-in isn't available right now. Use your email or username instead.`);
