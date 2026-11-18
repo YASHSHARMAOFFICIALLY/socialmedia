@@ -49,7 +49,7 @@ export function createPublishingService(deps: { db: Db; workspaces: WorkspaceSer
         const targets = selected.filter((v) => !live.has(v.id));
         if (targets.length === 0) throw new AppError(409, "ALREADY_SUBMITTED", "Every selected destination is already queued, published or failed (use retry for failed publications)");
         await q.query("SELECT 1 FROM workspaces WHERE id = $1 FOR UPDATE", [workspaceId]);   // serialize count-then-insert so parallel requests cannot all pass the plan limit
-        await (deps.gate ?? noGate)(workspaceId, "posts_per_month", targets.length, q);   // one unit per destination
+        await (deps.gate ?? noGate)(workspaceId, "posts_per_month", targets.length, q, opts.schedule?.at);   // one unit per destination, in the month it runs
         const now = new Date();
         const sched = opts.schedule;
         if (sched && !sched.allowConflicts) {
@@ -113,6 +113,8 @@ export function createPublishingService(deps: { db: Db; workspaces: WorkspaceSer
         const job = await repo.lockJob(q, workspaceId, jobId);
         if (!job) throw notFound("Publication");
         if (job.status !== "failed") throw new AppError(409, "NOT_RETRYABLE", `Only failed publications can be retried (status is '${job.status}')`);
+        await q.query("SELECT 1 FROM workspaces WHERE id = $1 FOR UPDATE", [workspaceId]);   // same serialization as publish
+        await (deps.gate ?? noGate)(workspaceId, "posts_per_month", 1, q);   // a retry runs now, so it uses this month
         try { await repo.retry(q, workspaceId, jobId); } catch (e) {
           if ((e as { code?: string }).code === "23505") throw new AppError(409, "ALREADY_SUBMITTED", "This destination already has a live publication");
           throw e;

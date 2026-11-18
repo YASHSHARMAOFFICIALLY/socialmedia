@@ -1,4 +1,5 @@
-import type { Db } from "../../infrastructure/database/db.js";
+import type { Db, Queryable } from "../../infrastructure/database/db.js";
+import { noGate, type Gate } from "../billing/gate.js";
 import { AppError, badRequest, notFound } from "../../shared/errors/errors.js";
 import { localDate, localIso, zonedLocalToUtc } from "../../shared/utils/timezone.js";
 import { auditRepository } from "../audit/audit.repository.js";
@@ -27,9 +28,18 @@ export function resolveWhen(w: When, now = new Date()): { at: Date; timezone: st
   return { at, timezone: w.timezone, ambiguous };
 }
 
-export function createSchedulingService(deps: { db: Db; workspaces: WorkspaceService; publishing: PublishingService; content: ContentService; now?: () => Date }) {
+export function createSchedulingService(deps: { db: Db; workspaces: WorkspaceService; publishing: PublishingService; content: ContentService; gate?: Gate; now?: () => Date }) {
   const { db, workspaces, publishing, content } = deps;
   const now = () => deps.now?.() ?? new Date();
+
+  /** Moving posts into another month uses that month's post limit (they no longer count against the old one). */
+  async function gateMonthChange(q: Queryable, workspaceId: string, jobs: { next_attempt_at: string }[], at: Date) {
+    const month = (d: Date) => `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    const leaving = jobs.filter((j) => month(new Date(j.next_attempt_at)) !== month(at));
+    if (leaving.length === 0) return;
+    await q.query("SELECT 1 FROM workspaces WHERE id = $1 FOR UPDATE", [workspaceId]);   // same serialization as publish
+    await (deps.gate ?? noGate)(workspaceId, "posts_per_month", leaving.length, q, at);
+  }
 
   const service = {
     async schedule(a: Actor, workspaceId: string, postId: string, input: When & { accountIds?: string[] | undefined; allowConflicts?: boolean | undefined }) {
@@ -58,6 +68,7 @@ export function createSchedulingService(deps: { db: Db; workspaces: WorkspaceSer
           const clash = (await repo.conflicts(q, workspaceId, jobs.map((j) => j.social_account_id), w.at, CONFLICT_WINDOW_MIN, postId)).rows;
           if (clash.length) throw new AppError(409, "SCHEDULE_CONFLICT", `Another post is scheduled on the same account within ${CONFLICT_WINDOW_MIN} minutes`, { conflicts: clash.map((c) => ({ jobId: c.id, postId: c.post_id, accountId: c.social_account_id, at: c.next_attempt_at })) });
         }
+        await gateMonthChange(q, workspaceId, jobs, w.at);
         const moved = await repo.moveScheduled(q, workspaceId, jobs.map((j) => j.id), w.at);   // guarded: jobs that just became due are not moved
         if (moved.length === 0) throw new AppError(409, "NOT_SCHEDULED", "The scheduled time has already arrived");
         await repo.dropPendingOutbox(q, moved);

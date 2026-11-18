@@ -73,7 +73,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
     createTelegramAdapter(),
   ];
   // Late-bound: billing is built after the services it gates (it needs `workspaces`).
-  const gate: Gate = (ws, feature, qty, q) => (cfg.BILLING_ENFORCE ? billing.enforce(ws, feature, qty, q) : Promise.resolve());
+  const gate: Gate = (ws, feature, qty, q, at) => (cfg.BILLING_ENFORCE ? billing.enforce(ws, feature, qty, q, at) : Promise.resolve());
   const workspaces = createWorkspaceService(db, mailer, cfg.APP_URL ?? cfg.BETTER_AUTH_URL ?? "", gate);
   const registry = createRegistry(adapters);
   const cipher = cfg.TOKEN_ENC_KEYS ? await createCipher(cfg.TOKEN_ENC_KEYS) : null;
@@ -109,7 +109,7 @@ export async function buildDeps(cfg: Config, log: Logger, db: Db, o: { mailer?: 
   };
   const analytics = createAnalyticsService({ db, workspaces, registry, cache: o.cache ?? createMemoryCache(), ...(cfg.BILLING_ENFORCE ? { historyDays: async (ws: string) => (await billing.check(ws, "analytics_history_days")).limit } : {}) });
   const reports = createReportService({ db, workspaces, analytics, log });
-  const scheduling = createSchedulingService({ db, workspaces, publishing, content });
+  const scheduling = createSchedulingService({ db, workspaces, publishing, content, gate });
   const competitors = createCompetitorService({ db, workspaces, registry, accounts, log });
   const aiProvider = o.aiProvider !== undefined ? o.aiProvider : cfg.ANTHROPIC_API_KEY ? createAnthropicProvider({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.AI_MODEL }) : null;
   const ai = createAiService({ db, workspaces, content, rules: contentRules, provider: aiProvider, dailyLimit: cfg.AI_DAILY_LIMIT });

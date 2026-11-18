@@ -30,16 +30,24 @@ export function createBillingService(deps: { db: Db; workspaces: WorkspaceServic
     return { plan: pv, subscription: sub ?? null };
   }
 
-  async function used(workspaceId: string, feature: string, kind: Kind, q: Queryable): Promise<number> {
+  async function used(workspaceId: string, feature: string, kind: Kind, q: Queryable, at = new Date()): Promise<number> {
     if (kind === "metered" && feature === "posts_per_month") {
-      // Published this period PLUS jobs already accepted (pending/scheduled-in-period/processing) that have not published yet:
-      // otherwise any number of posts could be scheduled before the first one runs.
-      const start = monthStart(), end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+      // Published in the month of `at` PLUS jobs already accepted (pending/scheduled/processing) that will run in that month
+      // and have not published yet: otherwise any number of posts could be scheduled before the first one runs.
+      // The current month also owns overdue jobs (due earlier, they run now); a future month owns only its own.
+      const target = at > new Date() ? at : new Date();
+      const start = monthStart(target);
+      const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+      const isCurrentMonth = start.getTime() === monthStart().getTime();
+      const jobsFrom = isCurrentMonth ? null : start;
       return (await q.query<{ n: number }>(
-        `SELECT (COALESCE((SELECT sum(quantity) FROM billing_usage_events WHERE workspace_id = $1 AND feature_key = $2 AND occurred_at >= $3), 0)
-               + (SELECT count(*) FROM publishing_jobs j WHERE j.workspace_id = $1 AND j.status IN ('pending','scheduled','processing') AND j.next_attempt_at < $4
-                    AND NOT EXISTS (SELECT 1 FROM billing_usage_events u WHERE u.workspace_id = j.workspace_id AND u.idempotency_key = 'published:' || j.id::text)))::int AS n`,
-        [workspaceId, feature, start, end])).rows[0]!.n;
+        `SELECT (COALESCE((SELECT sum(quantity) FROM billing_usage_events
+                            WHERE workspace_id = $1 AND feature_key = $2 AND occurred_at >= $3 AND occurred_at < $4), 0)
+               + (SELECT count(*) FROM publishing_jobs j
+                   WHERE j.workspace_id = $1 AND j.status IN ('pending','scheduled','processing')
+                     AND j.next_attempt_at < $4 AND ($5::timestamptz IS NULL OR j.next_attempt_at >= $5)
+                     AND NOT EXISTS (SELECT 1 FROM billing_usage_events u WHERE u.workspace_id = j.workspace_id AND u.idempotency_key = 'published:' || j.id::text)))::int AS n`,
+        [workspaceId, feature, start, end, jobsFrom])).rows[0]!.n;
     }
     if (kind === "metered") {
       return (await q.query<{ n: number }>("SELECT COALESCE(sum(quantity), 0)::int AS n FROM billing_usage_events WHERE workspace_id = $1 AND feature_key = $2 AND occurred_at >= $3", [workspaceId, feature, monthStart()])).rows[0]!.n;
@@ -55,7 +63,7 @@ export function createBillingService(deps: { db: Db; workspaces: WorkspaceServic
   }
 
   /** THE entitlement decision. Every feature gate (REST, MCP, workers) must go through here; nothing else reads plan limits. */
-  async function check(workspaceId: string, feature: string, quantity = 1, q: Queryable = db): Promise<Check> {
+  async function check(workspaceId: string, feature: string, quantity = 1, q: Queryable = db, at?: Date): Promise<Check> {
     const { plan, rows } = await entitlements(workspaceId, q);
     const e = rows.find((r) => r.feature_key === feature);
     if (!e) return { feature, allowed: false, kind: "flag", limit: 0, used: 0, remaining: 0, plan: plan.key, reason: "not_in_plan" };
@@ -64,14 +72,14 @@ export function createBillingService(deps: { db: Db; workspaces: WorkspaceServic
       const allowed = e.kind === "value" ? true : limit === 1;
       return { feature, allowed, kind: e.kind, limit, used: 0, remaining: null, plan: plan.key, ...(allowed ? {} : { reason: "not_in_plan" }) };
     }
-    const u = await used(workspaceId, feature, e.kind, q);
+    const u = await used(workspaceId, feature, e.kind, q, at);
     const allowed = limit === null || u + quantity <= limit;
     return { feature, allowed, kind: e.kind, limit, used: u, remaining: limit === null ? null : Math.max(0, limit - u), plan: plan.key, ...(allowed ? {} : { reason: "limit_reached" }) };
   }
 
   /** 402 when the plan does not allow it. The error carries the numbers, never anything about payment providers. */
-  async function enforce(workspaceId: string, feature: string, quantity = 1, q: Queryable = db) {
-    const c = await check(workspaceId, feature, quantity, q);
+  async function enforce(workspaceId: string, feature: string, quantity = 1, q: Queryable = db, at?: Date) {
+    const c = await check(workspaceId, feature, quantity, q, at);
     if (!c.allowed) throw new AppError(402, "PLAN_LIMIT_REACHED", `Your plan does not allow this (${feature}: ${c.reason})`, { feature, limit: c.limit, used: c.used, plan: c.plan });
     return c;
   }

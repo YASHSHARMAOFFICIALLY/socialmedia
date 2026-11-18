@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { createFakeAdapter, ok } from "./helpers/fake-adapter.js";
 import { createTestApp } from "./helpers/app.js";
-import { drain, publish, seedAccount, world } from "./helpers/world.js";
+import { drain, publish, seedAccount, world, type U } from "./helpers/world.js";
 
 const upgrade = (t: Awaited<ReturnType<typeof createTestApp>>, ws: string, plan: string) => t.db.query("INSERT INTO billing_subscriptions (workspace_id, plan_version_id, status, currency, interval) SELECT $1, v.id, 'active', 'INR', 'month' FROM billing_plan_versions v JOIN billing_plans p ON p.id = v.plan_id WHERE v.active AND p.key = $2", [ws, plan]);
 const usage = async (t: Awaited<ReturnType<typeof createTestApp>>, ws: string) => (await t.db.query<{ n: number }>("SELECT COALESCE(sum(quantity),0)::int AS n FROM billing_usage_events WHERE workspace_id = $1 AND feature_key = 'posts_per_month'", [ws])).rows[0]!.n;
@@ -58,6 +58,55 @@ describe("posts_per_month counts accepted-but-unpublished jobs", async () => {
     expect(res.body.error.details).toMatchObject({ feature: "posts_per_month", used: 30 });
     await drain(t);                                                                      // the queued one publishes: still exactly 30, not 31
     expect((await t.deps.billing.check(ws, "posts_per_month")).used).toBe(30);
+  });
+});
+
+describe("posts_per_month cannot be bypassed by scheduling ahead or by retry", async () => {
+  const t = await createTestApp([createFakeAdapter("linkedin", () => ok()).adapter], { env: { BILLING_ENFORCE: "true" } });
+  afterAll(t.close);
+  const now = new Date();
+  const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 9)).toISOString();
+  const schedule = (u: U, ws: string, post: string, at: string) =>
+    u.agent.post(`/workspaces/${ws}/posts/${post}/schedule`).send({ scheduledAt: at, timezone: "UTC", allowConflicts: true });
+  const newPost = async (u: U, ws: string) => {
+    const acc = (await t.db.query<{ id: string }>("SELECT id FROM social_accounts WHERE workspace_id = $1", [ws])).rows[0]!.id;
+    return (await u.agent.post(`/workspaces/${ws}/posts`).send({ body: `p ${Math.random()}`, variants: [{ accountId: acc }] })).body.data.id as string;
+  };
+
+  const limitPostsTo = async (n: number) => {
+    await t.db.query("ALTER TABLE billing_entitlements DISABLE TRIGGER USER");   // rows are immutable outside tests
+    await t.db.query("UPDATE billing_entitlements SET limit_value = $1 WHERE feature_key = 'posts_per_month'", [n]);
+  };
+
+  it("posts scheduled for next month count against next month's limit", async () => {
+    const { owner, ws, post } = await world(t, ["linkedin"]);
+    await limitPostsTo(1);
+    expect((await schedule(owner, ws, post, nextMonth)).status).toBe(202);
+    const second = await schedule(owner, ws, await newPost(owner, ws), nextMonth);
+    expect(second.status).toBe(402);
+    expect((await publish(owner, ws, await newPost(owner, ws))).status).toBe(202);   // this month's bucket is separate
+  });
+
+  it("rescheduling into a full month is refused; moving within the same month is not", async () => {
+    const { owner, ws, post } = await world(t, ["linkedin"]);
+    await limitPostsTo(1);
+    expect((await schedule(owner, ws, post, nextMonth)).status).toBe(202);              // next month: 1 of 1
+    const other = await newPost(owner, ws);
+    const soon = new Date(Date.now() + 3_600_000).toISOString();
+    expect((await schedule(owner, ws, other, soon)).status).toBe(202);                  // this month: 1 of 1
+    const move = (at: string) => owner.agent.put(`/workspaces/${ws}/posts/${other}/schedule`).send({ scheduledAt: at, timezone: "UTC", allowConflicts: true });
+    expect((await move(nextMonth)).status).toBe(402);
+    expect((await move(new Date(Date.now() + 7_200_000).toISOString())).status).toBe(200);
+  });
+
+  it("retrying a failed publication is refused when the month is used up", async () => {
+    const { owner, ws, post } = await world(t, ["linkedin"]);
+    await limitPostsTo(1);
+    const id = (await publish(owner, ws, post)).body.data.jobs[0].id as string;
+    await t.db.query("UPDATE publishing_jobs SET status = 'failed', failure_kind = 'permanent' WHERE id = $1", [id]);
+    await t.deps.billing.recordUsage(ws, "posts_per_month", 1, "bulk");
+    const r = await owner.agent.post(`/workspaces/${ws}/publications/${id}/retry`);
+    expect(r.status).toBe(402);
   });
 });
 
