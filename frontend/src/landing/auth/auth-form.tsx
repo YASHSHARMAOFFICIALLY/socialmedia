@@ -17,20 +17,20 @@ const PROVIDER_NAME: Record<Provider, string> = { google: "Google", microsoft: "
 const socialButton = "inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-line bg-white text-sm font-semibold text-ink transition-colors hover:border-ink disabled:opacity-60";
 const AFTER_AUTH = "/"; // ponytail: no signed-in app in this frontend yet; send people home
 
+type AuthResponse = { code?: string; token?: string; url?: string };
+
+// Errors carry a JSON body too ({ code, message }), so the body is read either way and `ok` goes back
+// to every caller, which checks it. An empty or non-JSON body becomes {}.
 async function post(path: string, body: unknown) {
+  // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- see above
   const r = await fetch(`${apiUrl}/api/auth${path}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  // Errors carry a JSON body too ({ code, message }); an empty or non-JSON body becomes {}.
-  if (!r.ok) {
-    const error = await r.json().catch(() => ({}));
-    return { ok: false, status: r.status, data: error };
-  }
-  const data = await r.json().catch(() => ({}));
-  return { ok: true, status: r.status, data };
+  const data: AuthResponse = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data };
 }
 
 function message(status: number, mode: Mode, code?: string) {

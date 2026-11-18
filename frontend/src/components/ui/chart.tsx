@@ -2,7 +2,9 @@
 
 import * as React from "react"
 import { cn } from "cn"
-// react-doctor-disable-next-line react-doctor/prefer-dynamic-import -- this module only loads through next/dynamic (sections/more-chart.tsx)
+// Only importer is landing/sections/campaign-chart.tsx, which loads through next/dynamic.
+// A new direct import of this file pulls Recharts into that page's first bundle.
+// react-doctor-disable-next-line react-doctor/prefer-dynamic-import -- see above
 import * as RechartsPrimitive from "recharts"
 import type { TooltipValueType } from "recharts"
 
@@ -201,7 +203,7 @@ function ChartTooltipContent({
 
             return (
               <div
-                key={key}
+                key={`${item.dataKey ?? ""}-${item.name ?? ""}`}
                 className={cn(
                   "flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground",
                   indicator === "dot" && "items-center"
@@ -299,7 +301,7 @@ function ChartLegendContent({
 
           return (
             <div
-              key={key}
+              key={`${item.dataKey ?? ""}-${item.value ?? ""}`}
               className={cn(
                 "flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground"
               )}

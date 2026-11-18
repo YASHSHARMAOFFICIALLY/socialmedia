@@ -4,12 +4,21 @@ import { useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { apiUrl } from "@/lib/site";
 
-// The ops token lives in memory only: never in web storage, where any script on the page could read
-// it. A reload asks for it again. Read through useSyncExternalStore, so there is no effect and no
+// The ops token lives in memory only, so it never outlives the page: a reload asks for it again.
+// (Script injected into the page could still read it in flight; this only limits how long it lingers.) Read through useSyncExternalStore, so there is no effect and no
 // hydration mismatch: the server snapshot is `undefined` ("not known yet"), the client's is the token or null.
 const listeners = new Set<() => void>();
 let token: string | null = null;
 let rejected = false;
+
+// Older builds kept the token in sessionStorage; clear any copy left in a tab opened before this one.
+try {
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem("postrally.opsToken");
+  }
+} catch {
+  // storage blocked: nothing stored to clear
+}
 
 const read = (): string | null => token;
 

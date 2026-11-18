@@ -46,7 +46,7 @@ function TokenGate() {
     <Shell>
       <form onSubmit={submit} className="mx-auto max-w-md py-24">
         <h1 className="font-heading text-heading text-ink">Health & <em>activity</em></h1>
-        <p className="mt-4 text-muted">Paste the backend&apos;s read-only OPS_READ_TOKEN (never OPS_TOKEN). It stays in this tab only and is sent as a bearer header to the API.</p>
+        <p className="mt-4 text-muted">Paste the backend&apos;s read-only OPS_READ_TOKEN (never OPS_TOKEN). It is kept in memory only (a reload asks for it again) and is sent as a bearer header to the API.</p>
         <label htmlFor="ops-token" className="mt-8 block text-sm font-medium text-ink">Ops token</label>
         <input id="ops-token" type="password" autoComplete="off" spellCheck={false} required value={value} onChange={(e) => setValue(e.target.value)} aria-describedby={rejected ? "ops-token-error" : undefined} aria-invalid={rejected || undefined}
           className={cn("mt-2 block w-full rounded-lg border border-input bg-white px-3.5 py-3 font-mono text-base text-ink", focus)} />
@@ -132,7 +132,9 @@ function Load<T>({ state, label, children }: { state: { data?: T; error?: OpsErr
   return <div aria-label={`Loading ${label}`} className="h-40 rounded-lg bg-secondary motion-safe:animate-pulse" />;
 }
 
-const Stat = ({ label, value, sub, tone = "none" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: Tone }) => (
+type StatProps = { label: string; value: ReactNode; sub?: ReactNode; tone?: Tone };
+
+const Stat = ({ label, value, sub, tone = "none" }: StatProps) => (
   <div className="min-w-0 py-4">
     <dt className="text-sm text-muted">{label}</dt>
     <dd className={cn("mt-1 font-mono text-2xl tabular-nums", TONE[tone])}>{value}</dd>
@@ -210,8 +212,6 @@ const NotTracked = ({ children }: { children: ReactNode }) => <span className="t
 
 // ---- panels ----
 
-type StatProps = { label: string; value: ReactNode; sub?: ReactNode; tone?: Tone };
-
 function databaseStat(db: Overview["data"]["status"]["db"]): StatProps {
   if (!db.ok) {
     return { label: "Database", value: "Unreachable", tone: "bad" };
@@ -231,7 +231,9 @@ function backlogStat(d: Overview["data"]): StatProps {
   };
 }
 
-function cronStat(cron: { alive: boolean; lastBeatSecondsAgo?: number } | undefined): StatProps {
+type WorkerBeat = NonNullable<Overview["data"]["status"]["workers"]>["scheduling"];
+
+function cronStat(cron: WorkerBeat | undefined): StatProps {
   const seen = cron?.lastBeatSecondsAgo;
   const value = seen !== undefined ? `${fmtAge(seen)} ago` : "Never";
   if (!cron?.alive) {
@@ -447,7 +449,11 @@ function Database({ d, state }: { d?: Overview["data"]; state: OvState }) {
               <div>
                 <p className="text-sm text-muted">Postgres size against the Neon {db.planName} cap ({db.planLimitSource === "neon.max_cluster_size" ? "read live from Neon" : "plan constant"})</p>
                 <p className="mt-2 font-mono text-3xl text-ink tabular-nums">{fmtBytes(db.sizeBytes)} <span className="text-lg text-muted">of {fmtBytes(db.planLimitBytes)}</span></p>
-                <meter className="sr-only" min={0} max={1} value={used ?? 0} aria-label="Database storage used">{fmtPct(used)}</meter>
+                {used !== null && (
+                  <meter className="sr-only" min={0} max={1} high={0.8} value={used} aria-label="Database storage used">
+                    {fmtPct(used)}
+                  </meter>
+                )}
                 <div aria-hidden className="mt-3 h-2.5 overflow-hidden rounded-full bg-secondary">
                   <div className={cn("h-full rounded-full", (used ?? 0) > 0.8 ? "bg-[#b42318]" : "bg-ink")} style={{ width: `${Math.max(Math.min((used ?? 0) * 100, 100), 0.5)}%` }} />
                 </div>
