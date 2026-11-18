@@ -6,7 +6,7 @@ import type { Db, Queryable } from "../../infrastructure/database/db.js";
 import type { Cipher } from "../../infrastructure/encryption/cipher.js";
 import { PlatformError } from "../../integrations/core/errors.js";
 import type { AdapterRegistry } from "../../integrations/core/registry.js";
-import type { ConnectedAccount, Platform } from "../../integrations/core/types.js";
+import type { ConnectedAccount, Platform, SocialAdapter } from "../../integrations/core/types.js";
 import { AppError, badRequest, notFound } from "../../shared/errors/errors.js";
 import { decodeCursor, page } from "../../shared/utils/pagination.js";
 import { auditRepository } from "../audit/audit.repository.js";
@@ -15,9 +15,19 @@ import { accountRepository as repo } from "./account.repository.js";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
+const REFRESH_TIMEOUT_MS = 15_000;
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 const cursorSchema = z.object({ createdAt: z.string(), id: z.string() });
 const verifierChallenge = (v: string) => createHash("sha256").update(v).digest("base64url");
+
+/** The refresh runs while the credentials row is locked, so it must not hang (adapters' refresh takes no signal). */
+export function refreshWithTimeout(adapter: Pick<SocialAdapter, "oauth">, refreshToken: string, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expire = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new PlatformError("retryable", "Token refresh timed out")), ms);
+  });
+  return Promise.race([adapter.oauth.refresh!(refreshToken), expire]).finally(() => clearTimeout(timer));
+}
 
 export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher | null; registry: AdapterRegistry; workspaces: WorkspaceService; gate?: Gate; log?: { error(o: object, m: string): void } }) {
   const { db, cfg, registry, workspaces } = deps;
@@ -45,6 +55,10 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
 
   /** Decrypts, refreshing first when near expiry. Row-locked so concurrent callers can't double-refresh. */
   async function getAccessToken(workspaceId: string, accountId: string, opts: { forceRefresh?: boolean } = {}): Promise<string> {
+    // Set once the platform has issued new tokens. If saving them fails, the platform may already have revoked the old
+    // refresh token (rotation), so they are written again outside the failed transaction instead of being dropped.
+    let rotated: Parameters<typeof repo.saveCredentials>[1] | null = null;
+    let rotatedAccess = "";
     return db.tx(async (q) => {
       const acct = await repo.get(q, workspaceId, accountId);
       if (!acct || acct.status === "disconnected") throw notFound("Account");
@@ -56,12 +70,14 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
       const adapter = registry.get(acct.platform);
       if (cred.refresh_token_enc && adapter.oauth.refresh) {
         try {
-          const t = await adapter.oauth.refresh(await cipher().decrypt(cred.refresh_token_enc, aad(accountId)));
-          await repo.saveCredentials(q, {
+          const t = await refreshWithTimeout(adapter, await cipher().decrypt(cred.refresh_token_enc, aad(accountId)), REFRESH_TIMEOUT_MS);
+          rotated = {
             accountId, workspaceId, accessEnc: await cipher().encrypt(t.accessToken, aad(accountId)),
             refreshEnc: t.refreshToken ? await cipher().encrypt(t.refreshToken, aad(accountId)) : null,
             expiresAt: t.expiresAt, refreshExpiresAt: t.refreshExpiresAt, scopes: t.scopes.length ? t.scopes : cred.scopes,
-          });
+          };
+          rotatedAccess = t.accessToken;
+          await repo.saveCredentials(q, rotated);
           return t.accessToken;
         } catch (e) {
           if (!(e instanceof PlatformError) || e.kind !== "permanent" && e.kind !== "auth_expired") throw e; // transient: caller retries
@@ -72,6 +88,11 @@ export function createAccountService(deps: { db: Db; cfg: Config; cipher: Cipher
       await repo.setStatus(q, workspaceId, accountId, "needs_reauth", "Access token expired and cannot be refreshed");
       throw new PlatformError("auth_expired", "Access token expired; account needs re-authorization");
     }).catch(async (e) => {
+      if (rotated) {
+        const saved = await repo.saveCredentials(db, rotated).then(() => true, () => false);
+        if (saved) return rotatedAccess;
+        deps.log?.error({ accountId }, "refreshed tokens could not be saved; the account may need re-authorization");
+      }
       // The status flip above is rolled back with the tx when we throw; persist it separately.
       if (e instanceof PlatformError && e.kind === "auth_expired") await repo.setStatus(db, workspaceId, accountId, "needs_reauth", e.message).catch((err) => deps.log?.error({ err, accountId }, "could not flag account as needing re-authorization"));
       throw e;

@@ -1,4 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
+import { refreshWithTimeout } from "../src/modules/accounts/account.service.js";
 import { createCipher } from "../src/infrastructure/encryption/cipher.js";
 import { PlatformError } from "../src/integrations/core/errors.js";
 import { NO_CAPABILITIES, type SocialAdapter } from "../src/integrations/core/types.js";
@@ -50,6 +51,23 @@ describe("token maintenance", async () => {
     expect((await t.deps.engine.tokens.keepAlive()).refreshed).toBe(1);                    // next run succeeds
   });
 
+  it("a rotated refresh token is not lost when saving it fails once", async () => {
+    const w = await world(t, []);
+    const id = await longLived(w.ws, w.owner, 4);
+    await t.db.query("CREATE SEQUENCE save_boom");
+    await t.db.query(`CREATE FUNCTION save_boom() RETURNS trigger AS $$ BEGIN IF nextval('save_boom') = 1 THEN RAISE EXCEPTION 'connection terminated'; END IF; RETURN NEW; END $$ LANGUAGE plpgsql`);
+    await t.db.query("CREATE TRIGGER save_boom BEFORE UPDATE ON oauth_credentials FOR EACH ROW EXECUTE FUNCTION save_boom()");
+    try {
+      refreshed.length = 0;
+      const token = await t.deps.accounts.getAccessToken(w.ws, id, { forceRefresh: true });
+      expect(token).toBe("new-1");
+      const row = (await t.db.query<{ refresh_token_enc: string }>("SELECT refresh_token_enc FROM oauth_credentials WHERE social_account_id = $1", [id])).rows[0]!;
+      expect(await cipher.decrypt(row.refresh_token_enc, `cred:${id}`)).toBe("new-1");   // the rotated token was kept
+    } finally {
+      await t.db.query("DROP TRIGGER save_boom ON oauth_credentials");
+    }
+  });
+
   it("after key rotation, stale credentials are re-encrypted with the new key, stay readable, and the job converges", async () => {
     const rotated = `2:${Buffer.alloc(32, 9).toString("base64")},${TEST_KEYS}`;       // new key first, old key kept for decryption
     const t2 = await createTestApp([adapter], { env: { TOKEN_ENC_KEYS: rotated } });
@@ -65,5 +83,12 @@ describe("token maintenance", async () => {
     expect(await t2.deps.accounts.getAccessToken(w.ws, id)).toBe("plain-access-token");
     expect(await t2.deps.engine.tokens.reencryptStale()).toEqual({ rewritten: 0, remaining: 0 });   // converged: the old key can now be removed
     await t2.close();
+  });
+});
+
+describe("refreshWithTimeout", () => {
+  it("a refresh that never answers fails as retryable, so the credentials row lock is released", async () => {
+    const hung = { oauth: { ...adapter.oauth, refresh: () => new Promise<never>(() => {}) } };
+    await expect(refreshWithTimeout(hung, "rt", 20)).rejects.toMatchObject({ kind: "retryable" });
   });
 });
