@@ -1,3 +1,4 @@
+import { revokeUnverifiedLocalAccess } from "./claim.js";
 import { betterAuth } from "better-auth";
 import { username } from "better-auth/plugins";
 import { PostgresDialect } from "kysely";
@@ -70,6 +71,19 @@ export function createAuth(db: Db, cfg: Config, mailer: Mailer) {
             // Graph photo fetch adds a round trip to every Microsoft login and often 404s on personal accounts.
             disableProfilePhoto: true, mapProfileToUser: microsoftUser } }
         : {}),
+    },
+    // An unverified password account must not block the real owner's Google/Microsoft sign-in (anyone can register
+    // any email). Linking still needs a provider-verified email; the hook below then cuts the squatter's access.
+    account: { accountLinking: { requireLocalEmailVerified: false } },
+    databaseHooks: {
+      account: {
+        create: {
+          after: async (account) => {
+            if (account.providerId === "credential") return;
+            await revokeUnverifiedLocalAccess(db, account.userId);
+          },
+        },
+      },
     },
     plugins: [username()],
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
