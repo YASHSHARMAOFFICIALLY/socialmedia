@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { PlatformError } from "../src/integrations/core/errors.js";
+import { markCreating, PlatformError } from "../src/integrations/core/errors.js";
 import { createFakeAdapter, ok } from "./helpers/fake-adapter.js";
 import { createTestApp } from "./helpers/app.js";
 
@@ -170,7 +170,8 @@ describe("publishing engine", async () => {
 
   describe("unknown outcomes (timeouts/crashes) are reconciled, never blindly retried", () => {
     it("a timed-out publish becomes 'reconciling'; the sweeper confirms it exists on the platform without re-publishing", async () => {
-      const li = createFakeAdapter("linkedin", () => new Promise(() => {}), { reconcile: async () => ({ externalId: "found-on-platform", url: "https://fake/found" }) });
+      const hangAfterCreating = (_n: number, i: { signal: AbortSignal }) => { markCreating(i.signal); return new Promise<never>(() => {}); };
+      const li = createFakeAdapter("linkedin", hangAfterCreating, { reconcile: async () => ({ externalId: "found-on-platform", url: "https://fake/found" }) });
       const t = await mk([li], { engine: { timeoutMs: 30 } });
       const { owner, ws, post } = await world(t);
       const id = (await publish(owner, ws, post)).body.data.jobs[0].id;
@@ -183,6 +184,15 @@ describe("publishing engine", async () => {
       expect(li.calls).toHaveLength(1);                      // never published a second time
       const ev = (await owner.agent.get(`/workspaces/${ws}/publications/${id}`)).body.data.events.map((e: { reason: string }) => e.reason);
       expect(ev.some((r: string) => /reconciled/.test(r))).toBe(true);
+    });
+
+    it("a timeout BEFORE the creating request (still uploading media) is retryable, not 'unknown'", async () => {
+      const li = createFakeAdapter("linkedin", () => new Promise(() => {}), { reconcile: async () => null });
+      const t = await mk([li], { engine: { timeoutMs: 30 } });
+      const { owner, ws, post } = await world(t);
+      await publish(owner, ws, post);
+      expect(await drain(t)).toEqual(["retry_scheduled"]);
+      expect((await jobs(t, ws))[0]).toMatchObject({ status: "pending", needs_reconciliation: false, failure_kind: "retryable" });
     });
 
     it("a DB error AFTER the platform accepted the post is reconciled, never marked failed (a manual retry would duplicate it)", async () => {

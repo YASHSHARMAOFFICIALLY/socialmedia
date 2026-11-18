@@ -1,4 +1,4 @@
-import { classifyHttp, PlatformError, retryAfterSeconds, secondsUntilEpoch, type PlatformErrorKind } from "./errors.js";
+import { classifyHttp, markCreating, PlatformError, retryAfterSeconds, secondsUntilEpoch, type PlatformErrorKind } from "./errors.js";
 
 export interface ApiOpts {
   /** The request that creates the post: an ambiguous failure is "unknown" (reconcile), never "retryable" (resend = duplicate). */
@@ -16,6 +16,7 @@ const pick = (b: unknown): string => {
 
 /** fetch + error classification that reads the error body (platformFetch only sees the status). Never includes request data in the message. */
 export async function apiFetch(f: typeof fetch, platform: string, url: string, init: RequestInit = {}, opts: ApiOpts = {}): Promise<Response> {
+  if (opts.creates) markCreating(init.signal);
   let res: Response;
   try {
     res = await f(url, init);

@@ -65,6 +65,8 @@ export const publishingRepository = {
     (await q.query<JobRow>(
       `UPDATE publishing_jobs SET status = 'processing', lease_token = $2, lease_until = now() + make_interval(secs => $3), attempt_count = attempt_count + 1, needs_reconciliation = false
         WHERE id = $1 AND status IN ('pending','scheduled') AND next_attempt_at <= now() RETURNING ${ALL}`, [jobId, leaseToken, leaseSeconds])).rows[0] ?? null,
+  extendLease: async (q: Queryable, j: JobRow, seconds: number) =>
+    (await q.query("UPDATE publishing_jobs SET lease_until = now() + make_interval(secs => $3) WHERE id = $1 AND lease_token = $2 AND status = 'processing'", [j.id, j.lease_token, seconds])).rowCount,
   startAttempt: (q: Queryable, j: JobRow) => q.query("INSERT INTO publishing_attempts (job_id, workspace_id, attempt_no, outcome) VALUES ($1,$2,$3,'started')", [j.id, j.workspace_id, j.attempt_count]),
   finishAttempt: (q: Queryable, j: Pick<JobRow, "id" | "attempt_count">, outcome: string, f: { message?: string | undefined; httpStatus?: number | undefined; response?: unknown } = {}) =>
     q.query(

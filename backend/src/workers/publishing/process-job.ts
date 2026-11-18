@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "../../infrastructure/database/db.js";
 import type { Logger } from "../../infrastructure/logger/logger.js";
-import { PlatformError } from "../../integrations/core/errors.js";
+import { creatingStarted, PlatformError } from "../../integrations/core/errors.js";
 import type { AdapterRegistry } from "../../integrations/core/registry.js";
 import type { PublishInput, PublishResult, ResolvedMedia } from "../../integrations/core/types.js";
 import type { AccountService } from "../../modules/accounts/account.service.js";
@@ -20,16 +20,36 @@ export interface EngineDeps {
   timeoutMs?: number;         // hard cap on the platform call
   random?: () => number;
 }
-const LEASE_S = 300, TIMEOUT_MS = 120_000;
+const LEASE_S = 300, TIMEOUT_MS = 120_000, MAX_TIMEOUT_MS = 600_000;
+
+/**
+ * Big media takes longer (uploads, X video processing, Instagram Reel containers), so a fixed 120s could never
+ * succeed for them. ponytail: one formula for every platform; size per platform if one keeps timing out.
+ */
+export function publishTimeoutMs(media: Pick<ResolvedMedia, "kind" | "sizeBytes">[]): number {
+  const videos = media.filter((m) => m.kind === "video").length;
+  const mb = media.reduce((sum, m) => sum + m.sizeBytes, 0) / (1024 * 1024);
+  const ms = TIMEOUT_MS + videos * 120_000 + Math.ceil(mb) * 1_000;
+  return Math.min(ms, MAX_TIMEOUT_MS);
+}
+
+function timeoutError(ms: number, signal: AbortSignal): PlatformError {
+  if (creatingStarted(signal)) return new PlatformError("unknown", `Platform call timed out after ${ms}ms; outcome unknown`);
+  return new PlatformError("retryable", `Platform call timed out after ${ms}ms before the post was sent`);
+}
 
 async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const ac = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const expire = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => {
+      const err = timeoutError(ms, ac.signal);   // read before abort: aborting does not change what was sent
+      ac.abort();
+      rej(err);
+    }, ms);
+  });
   try {
-    return await Promise.race([
-      run(ac.signal),
-      new Promise<never>((_, rej) => { timer = setTimeout(() => { ac.abort(); rej(new PlatformError("unknown", `Platform call timed out after ${ms}ms; outcome unknown`)); }, ms); }),
-    ]);
+    return await Promise.race([run(ac.signal), expire]);
   } finally { clearTimeout(timer); }
 }
 
@@ -80,7 +100,9 @@ export async function processPublishJob(deps: EngineDeps, jobId: string): Promis
   let result: PublishResult;
   try {
     const { adapter, input } = await buildPublishInput(deps, job);
-    result = await withTimeout((signal) => adapter.publish!({ ...input, signal }), deps.timeoutMs ?? TIMEOUT_MS)
+    const timeoutMs = deps.timeoutMs ?? publishTimeoutMs(input.media);
+    await coverWithLease(deps, job, timeoutMs);
+    result = await withTimeout((signal) => adapter.publish!({ ...input, signal }), timeoutMs)
       .catch((err: unknown) => { throw asPublishError(err); });
   } catch (err) {
     return handleFailure(deps, job, err);
@@ -108,6 +130,14 @@ export async function processPublishJob(deps: EngineDeps, jobId: string): Promis
   }
   if (!ok) { log.error({ jobId, externalId: result.externalId }, "published but lease was lost; reconciliation will confirm"); return "lease_lost"; }
   return "published";
+}
+
+/** The lease must outlive the platform call, or the sweeper would reconcile a job that is still publishing. */
+async function coverWithLease(deps: EngineDeps, job: JobRow, timeoutMs: number) {
+  const needS = Math.ceil(timeoutMs / 1000) + 60;
+  if (needS <= (deps.leaseSeconds ?? LEASE_S)) return;
+  const extended = await deps.db.tx((q) => repo.extendLease(q, job, needS));
+  if (!extended) throw new PlatformError("retryable", "Lost the job lease before publishing");
 }
 
 /**

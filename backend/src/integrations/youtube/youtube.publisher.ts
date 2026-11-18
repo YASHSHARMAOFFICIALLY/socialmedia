@@ -1,5 +1,5 @@
 import { matchRecentPost } from "../core/reconcile.js";
-import { PlatformError, classifyHttp, retryAfterSeconds } from "../core/errors.js";
+import { PlatformError, classifyHttp, markCreating, retryAfterSeconds } from "../core/errors.js";
 import type { PublishInput, PublishResult, SocialAdapter } from "../core/types.js";
 
 // Verified (YouTube Data API videos.insert + resumable upload protocol docs):
@@ -67,6 +67,7 @@ export function createYouTubePublisher(f: typeof fetch = fetch, o: { maxResumes?
         const src = await f(source, { signal: i.signal, ...(offset > 0 ? { headers: { Range: `bytes=${offset}-` } } : {}) });
         if (!src.ok || !src.body) throw new PlatformError("retryable", `media source responded ${src.status}`);
         const remaining = video.sizeBytes - offset;
+        markCreating(i.signal);   // the video exists once the upload completes
         const res = await f(session, {
           method: "PUT", signal: i.signal, duplex: "half",
           headers: { "Content-Type": video.mimeType, "Content-Length": String(remaining), ...(offset > 0 ? { "Content-Range": `bytes ${offset}-${video.sizeBytes - 1}/${video.sizeBytes}` } : {}) },

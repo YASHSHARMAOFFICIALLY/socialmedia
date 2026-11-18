@@ -11,6 +11,17 @@ export class PlatformError extends Error {
   }
 }
 
+/**
+ * Signals whose creating request has been sent. The engine reads this when its publish timeout fires:
+ * before the creating request nothing can exist on the platform (retryable); after it the outcome is unknown.
+ */
+const creatingSent = new WeakSet<AbortSignal>();
+export function markCreating(signal: AbortSignal | null | undefined): void {
+  if (!signal) throw new Error("a creating request must carry the publish signal");   // programmer error: caught by tests
+  creatingSent.add(signal);
+}
+export const creatingStarted = (signal: AbortSignal) => creatingSent.has(signal);
+
 /** Default HTTP classification; adapters override for platform-specific codes. */
 export function classifyHttp(status: number, retryAfterHeader?: string | null): PlatformErrorKind {
   if (status === 401) return "auth_expired";
@@ -28,6 +39,7 @@ export const secondsUntilEpoch = (h?: string | null, now = Date.now()) => (h && 
  * 5xx) the post may exist, so the outcome is "unknown" (reconcile) rather than "retryable" (resend = duplicate).
  */
 export async function platformFetch(f: typeof fetch, platform: string, url: string, init: RequestInit, opts: { creates?: boolean } = {}): Promise<Response> {
+  if (opts.creates) markCreating(init.signal);
   let res: Response;
   try {
     res = await f(url, init);
