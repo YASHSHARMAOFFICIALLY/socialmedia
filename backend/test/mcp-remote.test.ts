@@ -113,7 +113,9 @@ describe("remote MCP: /mcp endpoint, tokens, device flow", async () => {
     const poll = (code = start.device_code) => request(t.app).post("/mcp/token").type("form").send({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code: code });
     expect((await poll()).body.error).toBe("authorization_pending");
     expect((await poll()).body.error).toBe("slow_down");                                              // polled again within the interval
-    expect((await request(t.app).get("/mcp/device")).status).toBe(401);                                // approval page needs a signed-in browser
+    const signedOut = await request(t.app).get("/mcp/device");
+    expect(signedOut.status).toBe(302);                     // approval page needs a signed-in browser: sent to login
+    expect(signedOut.headers.location).toContain("/login?next=");
     const linked = await owner.agent.get(`/mcp/device?user_code=${start.user_code}`);   // a phishing link with the attacker's code
     expect(linked.text).not.toContain(start.user_code);
     expect(linked.text).not.toContain("postrally-cli");

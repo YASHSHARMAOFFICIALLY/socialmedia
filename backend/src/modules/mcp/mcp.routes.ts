@@ -149,7 +149,7 @@ ${wss.length ? `<form method="post" action="/mcp/authorize">${hidden}<label>Work
   const deviceCsp = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'";
   const devicePage = (title: string, body: string) =>
     `${pageHead}<title>${title}</title><body style="font:16px system-ui;max-width:28rem;margin:3rem auto;padding:0 1rem">${body}</body>`;
-  r.get("/mcp/device", d.authed, (_req, res) => {
+  r.get("/mcp/device", signInFirst, (_req, res) => {
     res.type("html").setHeader("Content-Security-Policy", deviceCsp);
     res.send(devicePage("Connect a client", `<h1>Connect a client</h1>
 <p>Enter the code shown in the terminal where you ran the PostRally CLI. Never enter a code someone sent you.</p>
