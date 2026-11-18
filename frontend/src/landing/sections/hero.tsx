@@ -19,13 +19,14 @@ import hills from "../../../public/hero-hills.jpg";
 //
 // Storyboard (ms after load):
 //    0  photo starts settling (scale 1.06 to 1 over 2.4s)
-//  150  headline words rise, one every 60ms
-//  600  body copy rises
-//  720  button rises
-//  840  composer screen rises
+//    0  headline words rise, one every 35ms
+//  400  body copy rises
+//  520  button rises
+//  640  composer screen rises
 //    0  birds glide past every 46s (sky-life.tsx)
 //  900  network icons land, one every 55ms (network-row.tsx)
-const TIMING = { firstWord: 150, wordStagger: 60, body: 600, cta: 720, screen: 840 } as const;
+// Words start at once, 35ms apart: the last headline word is the LCP element, so this delay is LCP time.
+const TIMING = { firstWord: 0, wordStagger: 35, body: 400, cta: 520, screen: 640 } as const;
 
 export function Hero() {
   let word = 0;
